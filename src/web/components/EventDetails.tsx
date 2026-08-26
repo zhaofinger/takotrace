@@ -1,0 +1,213 @@
+import type { CompactTraceEvent, TraceEvent } from "../types";
+import { MarkdownContent } from "./MarkdownContent";
+import { SubagentThreadDetails } from "./SubagentThreadDetails";
+
+type DetailEvent = CompactTraceEvent | TraceEvent;
+type RecordValue = Record<string, unknown>;
+
+function record(value: unknown): RecordValue {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+export function eventRaw(event: DetailEvent): RecordValue {
+  if (!("raw" in event)) return {};
+  const raw = record(event.raw);
+  const item = record(record(raw.params).item);
+  return Object.keys(item).length ? item : raw;
+}
+
+function normalizedType(event: DetailEvent): string {
+  return (text(eventRaw(event).type) ?? event.type).toLowerCase().replaceAll(/[^a-z]/g, "");
+}
+
+function preview(value: string, maximum = 4_000): string {
+  if (value.length <= maximum) return value;
+  return `${value.slice(0, maximum)}\n…`;
+}
+
+function lineCount(value: string): number {
+  return value ? value.split("\n").length : 0;
+}
+
+function json(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function FieldList({ fields }: { fields: Array<[string, unknown]> }) {
+  const visible = fields.filter(([, value]) => value !== undefined && value !== null && value !== "");
+  return visible.length ? (
+    <dl className="vbg-custom-event-fields">
+      {visible.map(([label, value]) => (
+        <div key={label}><dt>{label}</dt><dd>{String(value)}</dd></div>
+      ))}
+    </dl>
+  ) : null;
+}
+
+function CodeBlock({ children }: { children: string }) {
+  return <pre className="vbg-custom-event-code"><code>{children}</code></pre>;
+}
+
+function CommandDetails({ raw }: { raw: RecordValue }) {
+  const command = text(raw.command);
+  const output = text(raw.aggregatedOutput);
+  const actions = Array.isArray(raw.commandActions) ? raw.commandActions.map(record) : [];
+
+  return (
+    <div className="vbg-custom-event-detail">
+      {command && <CodeBlock>{command}</CodeBlock>}
+      <FieldList fields={[["Working directory", raw.cwd], ["Process", raw.processId], ["Exit code", raw.exitCode]]} />
+      {actions.length > 0 && (
+        <div className="vbg-custom-event-actions" aria-label="Command actions">
+          {actions.map((action, index) => {
+            const kind = text(action.type) ?? "command";
+            const target = text(action.path) ?? text(action.query) ?? text(action.name) ?? text(action.command);
+            return <span key={`${kind}-${index}`}><strong>{kind}</strong>{target && <code>{target}</code>}</span>;
+          })}
+        </div>
+      )}
+      {output && <CodeBlock>{preview(output)}</CodeBlock>}
+    </div>
+  );
+}
+
+function McpDetails({ raw }: { raw: RecordValue }) {
+  const args = record(raw.arguments);
+  const code = text(args.code) ?? text(args.function);
+  const title = text(args.title);
+  const result = record(raw.result);
+  const content = Array.isArray(result.content) ? result.content.map(record) : [];
+  const error = text(raw.error);
+  const remainingArgs = Object.fromEntries(Object.entries(args).filter(([key]) => !["code", "function", "title"].includes(key)));
+
+  return (
+    <div className="vbg-custom-event-detail">
+      {title && <p className="vbg-custom-event-lede">{title}</p>}
+      <FieldList fields={[["Server", raw.server], ["Tool", raw.tool], ["Plugin", raw.pluginId], ["Read only", raw.readOnlyHint]]} />
+      {code && <CodeBlock>{preview(code)}</CodeBlock>}
+      {Object.keys(remainingArgs).length > 0 && (
+        <details className="vbg-custom-event-disclosure">
+          <summary>Arguments · {Object.keys(remainingArgs).length} fields</summary>
+          <CodeBlock>{preview(json(remainingArgs))}</CodeBlock>
+        </details>
+      )}
+      {error && <p className="vbg-custom-event-error" role="alert">{error}</p>}
+      {content.length > 0 && (
+        <details className="vbg-custom-event-disclosure">
+          <summary>Result · {content.length} block{content.length === 1 ? "" : "s"}</summary>
+          <div className="vbg-custom-event-results">
+            {content.map((block, index) => {
+              if (block.type === "text") return <CodeBlock key={index}>{preview(text(block.text) ?? "")}</CodeBlock>;
+              if (block.type === "image") return <p key={index}>Image result · {String(block.mimeType ?? "unknown type")}</p>;
+              return <CodeBlock key={index}>{preview(json(block))}</CodeBlock>;
+            })}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function FileChangeDetails({ raw }: { raw: RecordValue }) {
+  const changes = Array.isArray(raw.changes) ? raw.changes.map(record) : [];
+  return (
+    <ul className="vbg-custom-file-changes">
+      {changes.map((change, index) => {
+        const kind = text(record(change.kind).type) ?? text(change.kind) ?? "change";
+        return <li key={`${String(change.path)}-${index}`}><strong>{kind}</strong><code>{String(change.path ?? "Unknown file")}</code></li>;
+      })}
+    </ul>
+  );
+}
+
+function WebSearchDetails({ raw }: { raw: RecordValue }) {
+  const results = Array.isArray(raw.results) ? raw.results.map(record) : [];
+  return (
+    <div className="vbg-custom-event-detail">
+      <FieldList fields={[["Query", raw.query ?? record(raw.action).query], ["Action", record(raw.action).type]]} />
+      {results.length > 0 && (
+        <ol className="vbg-custom-search-results">
+          {results.slice(0, 8).map((result, index) => (
+            <li key={`${String(result.ref_id)}-${index}`}>
+              {text(result.url) ? <a href={text(result.url)} rel="noreferrer" target="_blank">{String(result.title ?? result.url)}</a> : <strong>{String(result.title ?? result.ref_id ?? "Result")}</strong>}
+              {text(result.domain) && <span>{text(result.domain)}</span>}
+              {text(result.snippet) && <p>{text(result.snippet)}</p>}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function SubagentDetails({ raw }: { raw: RecordValue }) {
+  const receivers = Array.isArray(raw.receiverThreadIds) ? raw.receiverThreadIds.join(", ") : undefined;
+  return (
+    <div className="vbg-custom-event-detail">
+      {text(raw.prompt) && <p className="vbg-custom-event-lede">{text(raw.prompt)}</p>}
+      <FieldList fields={[
+        ["Action", raw.tool ?? raw.kind],
+        ["Agent", raw.agentPath],
+        ["Thread", raw.agentThreadId],
+        ["Targets", receivers],
+        ["Model", raw.model],
+        ["Reasoning", raw.reasoningEffort],
+      ]} />
+      <SubagentThreadDetails
+        raw={raw}
+        renderEventDetails={(event) => <EventDetails event={event} fallback={event.summary} />}
+      />
+    </div>
+  );
+}
+
+function UserMessageDetails({ event, fallback, raw }: { event: DetailEvent; fallback: string; raw: RecordValue }) {
+  const content = Array.isArray(raw.content) ? raw.content.map(record) : [];
+  const images = content.flatMap((entry, index) => entry.type === "localImage" && text(entry.path)
+    ? [{ index, path: text(entry.path)! }]
+    : []);
+  const canLoadImages = Boolean(event.turnId && event.itemId);
+
+  return (
+    <div className="vbg-custom-user-message">
+      <MarkdownContent>{fallback}</MarkdownContent>
+      {images.length > 0 && (
+        <div aria-label="User attachments" className="vbg-custom-user-attachments">
+          {images.map((image) => canLoadImages ? (
+            <img
+              alt={image.path.split("/").pop() ?? "User attachment"}
+              key={`${image.index}-${image.path}`}
+              loading="lazy"
+              src={`/api/attachments/${encodeURIComponent(event.threadId)}/${encodeURIComponent(event.turnId!)}/${encodeURIComponent(event.itemId!)}/${image.index}`}
+            />
+          ) : (
+            <span key={`${image.index}-${image.path}`}>Image attachment unavailable</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function EventDetails({ event, fallback }: { event: DetailEvent; fallback: string }) {
+  const raw = eventRaw(event);
+  const type = normalizedType(event);
+
+  if (type === "usermessage") return <UserMessageDetails event={event} fallback={fallback} raw={raw} />;
+  if (type === "commandexecution") return <CommandDetails raw={raw} />;
+  if (type === "mcptoolcall") return <McpDetails raw={raw} />;
+  if (type === "filechange") return <FileChangeDetails raw={raw} />;
+  if (type.includes("websearch")) return <WebSearchDetails raw={raw} />;
+  if (type === "subagentactivity" || type === "collabagenttoolcall") return <SubagentDetails raw={raw} />;
+  if (type === "imageview") return <FieldList fields={[["Image", raw.path]]} />;
+  if (type === "imagegeneration") return <FieldList fields={[["Saved path", raw.savedPath], ["Prompt", raw.revisedPrompt]]} />;
+  return <MarkdownContent>{fallback}</MarkdownContent>;
+}

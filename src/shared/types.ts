@@ -1,0 +1,117 @@
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+export type EntityStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface TraceEvent {
+  seq: number;
+  at: string;
+  startedAt?: string;
+  completedAt?: string;
+  method: string;
+  type: string;
+  status: EntityStatus;
+  threadId: string;
+  turnId?: string;
+  itemId?: string;
+  parentItemId?: string;
+  summary: string;
+  durationMs?: number;
+  raw: unknown;
+}
+
+export interface TurnState {
+  id: string;
+  status: EntityStatus;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  items: TraceEvent[];
+}
+
+export interface ThreadState {
+  id: string;
+  title: string;
+  status: EntityStatus;
+  turnsLoaded: boolean;
+  createdAt: string;
+  updatedAt: string;
+  cwd?: string;
+  projectFolder?: string;
+  turns: TurnState[];
+}
+
+export interface AppState {
+  connection: {
+    status: ConnectionStatus;
+    userAgent?: string;
+    error?: string;
+  };
+  threads: ThreadState[];
+  events: TraceEvent[];
+}
+
+export type CompactTraceEvent = Omit<TraceEvent, 'raw'>;
+export type CompactTurnState = Omit<TurnState, 'items'> & {
+  summary: string;
+  itemCount: number;
+  items: CompactTraceEvent[];
+};
+export type CompactThreadState = Omit<ThreadState, 'turns'> & { turns: CompactTurnState[] };
+
+export interface CompactAppState {
+  connection: AppState['connection'];
+  threads: CompactThreadState[];
+  events: [];
+}
+
+export interface HistoricalTurn {
+  id: string;
+  status: EntityStatus;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  items: Array<Omit<TraceEvent, 'seq'>>;
+}
+
+export interface HistoricalThread {
+  id: string;
+  sessionId?: string;
+  forkedFromId?: string | null;
+  parentThreadId?: string | null;
+  title: string;
+  status: EntityStatus;
+  turnsLoaded: boolean;
+  createdAt: string;
+  updatedAt: string;
+  cwd?: string;
+  projectFolder?: string;
+  ephemeral?: boolean;
+  modelProvider?: string;
+  path?: string | null;
+  cliVersion?: string;
+  source?: unknown;
+  threadSource?: string | null;
+  agentNickname?: string | null;
+  agentRole?: string | null;
+  agentPath?: string | null;
+  depth?: number;
+  turns: HistoricalTurn[];
+}
+
+export interface RpcNotification {
+  method: string;
+  params?: unknown;
+}
+
+export interface RpcRequest {
+  id: number | string;
+  method: string;
+  params?: unknown;
+}
+
+export interface RpcResponse {
+  id: number | string;
+  result?: unknown;
+  error?: { code: number; message: string; data?: unknown };
+}
+
+export type RpcMessage = RpcNotification | RpcRequest | RpcResponse;

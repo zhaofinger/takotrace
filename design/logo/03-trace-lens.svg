@@ -1,0 +1,10 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ThreadScope Trace Lens mark</title>
+  <desc id="desc">A magnifying lens whose handle becomes a connected trace.</desc>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="43" cy="41" r="23" stroke-width="7"/>
+    <path d="M59 58L76 75" stroke-width="7"/>
+    <path d="M25 43H38L45 33L52 49H61" stroke-width="4"/>
+  </g>
+  <circle cx="76" cy="75" r="5" fill="currentColor"/>
+</svg>

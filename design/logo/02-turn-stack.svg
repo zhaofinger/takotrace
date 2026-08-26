@@ -1,0 +1,13 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ThreadScope Turn Stack mark</title>
+  <desc id="desc">Three chronological turns passing through one observation window.</desc>
+  <defs>
+    <clipPath id="turn-stack-window"><circle cx="50" cy="50" r="33"/></clipPath>
+  </defs>
+  <circle cx="50" cy="50" r="33" fill="none" stroke="currentColor" stroke-width="4"/>
+  <g clip-path="url(#turn-stack-window)" fill="none" stroke="currentColor" stroke-linecap="round">
+    <path d="M9 35H58L71 27H91" stroke-width="7"/>
+    <path d="M9 50H91" stroke-width="7"/>
+    <path d="M9 65H42L55 73H91" stroke-width="7"/>
+  </g>
+</svg>

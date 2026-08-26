@@ -1,0 +1,5 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ThreadScope TS Monogram</title>
+  <desc id="desc">A geometric T and S monogram built from one continuous thread.</desc>
+  <path d="M24 24H72M48 24V70C48 76 43 80 37 80H28M48 46H66C73 46 78 51 78 58V66C78 74 72 80 64 80H54" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

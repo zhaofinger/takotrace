@@ -1,0 +1,42 @@
+{
+  "name": "thread-scope",
+  "version": "0.1.0",
+  "description": "Local realtime viewer for Codex app-server threads",
+  "type": "module",
+  "bin": {
+    "thread-scope": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "dev": "concurrently --kill-others --names server,web --prefix-colors magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch src/cli.ts --no-open",
+    "dev:web": "vite",
+    "prepublishOnly": "npm run test && npm run typecheck && npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ."
+  },
+  "dependencies": {
+    "@antv/g6": "^5.1.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.2",
+    "vite": "^6.1.0",
+    "vitest": "^3.2.4"
+  }
+}

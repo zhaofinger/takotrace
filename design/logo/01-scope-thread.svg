@@ -1,0 +1,9 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ThreadScope Scope Thread mark</title>
+  <desc id="desc">A broken scope ring crossed by a live thread trace.</desc>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M69 23A34 34 0 1 0 77 69" stroke-width="7"/>
+    <path d="M31 55H45L53 42L63 61H79" stroke-width="6"/>
+  </g>
+  <circle cx="79" cy="61" r="5" fill="currentColor"/>
+</svg>
