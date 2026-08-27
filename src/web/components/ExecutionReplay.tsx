@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DensitySwitch } from "./DensitySwitch";
 import { EventDetails } from "./EventDetails";
+import { flowKindIconName } from "./InteractionFlow";
 import type { FlowEvent, FlowKind } from "./InteractionFlow";
 import { Icon } from "./Icon";
 import { StatusMark } from "./StatusMark";
@@ -51,14 +53,6 @@ function formatTime(value: string): string {
   return Number.isNaN(date.getTime())
     ? value
     : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-}
-
-function iconName(kind: FlowKind): "activity" | "chevron" | "code" | "search" | "tool" {
-  if (kind === "reasoning") return "activity";
-  if (kind === "subagent") return "chevron";
-  if (kind === "skill" || kind === "file") return "code";
-  if (kind === "web") return "search";
-  return "tool";
 }
 
 function timestamp(value?: string): number | undefined {
@@ -161,6 +155,9 @@ function overviewLayout(items: OverviewItem[], scale: ReplayTimeScale): Overview
 function overviewHasActualTiming(items: OverviewItem[]): boolean {
   const timed = items.filter((item) => item.timing !== "order");
   if (timed.length < 2) return false;
+  const timestampsFollowExecutionOrder = items.every((item, index) => index === 0
+    || item.startedAtMs >= items[index - 1].startedAtMs);
+  if (!timestampsFollowExecutionOrder) return false;
   const startedAtMs = timed.map((item) => item.startedAtMs);
   return new Set(startedAtMs).size > 1
     && Math.max(...timed.map((item) => item.completedAtMs)) > Math.min(...startedAtMs);
@@ -181,10 +178,6 @@ function ReplayOverview({
   const actualTimingAvailable = overviewHasActualTiming(items);
   const effectiveScale = scale === "actual" && actualTimingAvailable ? "actual" : "logical";
   const layout = overviewLayout(items, effectiveScale);
-  const overviewDurationMs = Math.max(0,
-    Math.max(...items.map((item) => item.completedAtMs))
-      - Math.min(...items.map((item) => item.startedAtMs)),
-  );
   const visibleLanes = OVERVIEW_LANES.filter((lane) => layout.some((item) => item.lane === lane.key));
   const laneHeights = new Map<OverviewLane, number>();
   const laneOffsets = new Map<OverviewLane, number>();
@@ -208,15 +201,11 @@ function ReplayOverview({
     ? `M ${point.x} ${point.y}`
     : `${value} H ${point.x} V ${point.y}`, "");
   return (
-    <div aria-label="Trace overview" className="vbg-custom-replay-overview">
-      <div aria-hidden="true" className="vbg-custom-replay-overview__axis">
-        <span>{effectiveScale === "actual" ? "Timeline" : "Sequence"}</span>
-        <div>
-          <i>{effectiveScale === "actual" ? "0ms" : "1"}</i>
-          <small>{effectiveScale === "actual" ? "Width = duration" : "Width = relative duration"}</small>
-          <i>{effectiveScale === "actual" ? formatDuration(overviewDurationMs) : items.length}</i>
-        </div>
-      </div>
+    <div
+      aria-label="Trace overview"
+      className="vbg-custom-replay-overview"
+      title={effectiveScale === "actual" ? "Bar width represents duration" : "Bar width represents relative duration"}
+    >
       <div className="vbg-custom-replay-overview__plot" style={{ height: `${totalHeight}px` }}>
         {effectiveScale === "logical" && points.length > 1 && (
           <svg
@@ -254,7 +243,7 @@ function ReplayOverview({
                       data-timing={item.timing}
                       key={item.id}
                       onClick={() => onSelect(item.id)}
-                      style={{ left: `${item.left}%`, top: `${item.track * OVERVIEW_TRACK_PITCH + 3}px`, width: `max(6px, ${item.width}%)` }}
+                      style={{ left: `${item.left}%`, top: `${item.track * OVERVIEW_TRACK_PITCH + 3}px`, width: point ? "8px" : `max(6px, ${item.width}%)` }}
                       title={accessibleLabel}
                       type="button"
                     />
@@ -269,18 +258,35 @@ function ReplayOverview({
   );
 }
 
-function ExecutionGroup({ actions, selectedId }: { actions: ReplayAction[]; selectedId?: string }) {
-  if (!actions.length) return null;
+function ExecutionGroup({
+  actions,
+  selectedId,
+  onSelectAction,
+}: {
+  actions: ReplayAction[];
+  selectedId?: string;
+  onSelectAction: (id: string) => void;
+}) {
   const status = replayGroupStatus(actions);
   const timing = replayExecutionTiming(actions);
   const failedCount = actions.filter((item) => item.status === "failed" || item.status === "error").length;
-  const shouldOpen = status === "failed"
+  const shouldOpenInitially = status === "failed"
     || status === "running"
-    || actions.length <= 3
-    || actions.some((item) => item.id === selectedId);
+    || actions.length <= 3;
+  const [isOpen, setIsOpen] = useState(shouldOpenInitially);
+
+  useEffect(() => {
+    if (actions.some((item) => item.id === selectedId)) setIsOpen(true);
+  }, [actions, selectedId]);
+
+  if (!actions.length) return null;
 
   return (
-    <details className="vbg-custom-replay-execution" open={shouldOpen || undefined}>
+    <details
+      className="vbg-custom-replay-execution"
+      open={isOpen || undefined}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
       <summary>
         <span aria-hidden="true" className="vbg-custom-replay-disclosure"><Icon name="chevron" /></span>
         <strong>Execution</strong>
@@ -313,9 +319,15 @@ function ExecutionGroup({ actions, selectedId }: { actions: ReplayAction[]; sele
               id={item.id}
               key={item.id}
             >
-              <details>
-                <summary>
-                  <span aria-hidden="true" className="vbg-custom-replay-action__icon"><Icon name={iconName(item.kind)} /></span>
+              <button
+                type="button"
+                className="vbg-custom-replay-action__summary"
+                id={`replay-action-trigger-${item.id}`}
+                aria-controls={selectedId === item.id ? "replay-action-inspector" : undefined}
+                aria-expanded={selectedId === item.id}
+                onClick={() => onSelectAction(item.id)}
+              >
+                  <span aria-hidden="true" className="vbg-custom-replay-action__icon"><Icon name={flowKindIconName(item.kind)} /></span>
                   <span className="vbg-custom-replay-action__label">{item.label}</span>
                   <strong>{item.title}</strong>
                   {item.meta && <code>{item.meta}</code>}
@@ -326,11 +338,7 @@ function ExecutionGroup({ actions, selectedId }: { actions: ReplayAction[]; sele
                     >{formatDuration(renderedDurationMs)}</time>
                   )}
                   <StatusMark label={false} status={item.status} />
-                </summary>
-                <div className="vbg-custom-replay-action__detail">
-                  <EventDetails event={item.event} fallback={item.detail} />
-                </div>
-              </details>
+              </button>
             </li>
           );
         })}
@@ -339,14 +347,106 @@ function ExecutionGroup({ actions, selectedId }: { actions: ReplayAction[]; sele
   );
 }
 
+export function ReplayActionInspector({
+  action,
+  collapsed,
+  onClose,
+  onToggle,
+}: {
+  action: ReplayAction;
+  collapsed: boolean;
+  onClose: () => void;
+  onToggle: () => void;
+}) {
+  const titleId = `replay-action-inspector-title-${action.event.seq}`;
+  const bodyId = `replay-action-inspector-body-${action.event.seq}`;
+  const duration = formatDuration(action.durationMs);
+
+  return (
+    <aside
+      className={`vbg-custom-sequence__inspector vbg-custom-replay-inspector${collapsed ? " vbg-custom-sequence__inspector--collapsed" : ""}`}
+      id="replay-action-inspector"
+      aria-labelledby={titleId}
+    >
+      <header className="vbg-custom-sequence__inspector-header">
+        <div className="vbg-custom-sequence__inspector-title" id={titleId} aria-live="polite">
+          <span className="vbg-custom-sequence__step-num">Step {action.event.seq}</span>
+          <strong title={action.title}>{action.title}</strong>
+          <StatusMark status={action.status} />
+        </div>
+        <div className="vbg-custom-sequence__inspector-actions">
+          <button
+            type="button"
+            className="vbg-custom-sequence__inspector-toggle"
+            onClick={onToggle}
+            aria-controls={bodyId}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand action details" : "Collapse action details"}
+            title={collapsed ? "Expand details" : "Collapse details"}
+          >
+            <Icon name="chevron" />
+          </button>
+          <button
+            type="button"
+            className="vbg-custom-sequence__inspector-close"
+            onClick={onClose}
+            aria-label="Close action details"
+            title="Close details"
+          >
+            &times;
+          </button>
+        </div>
+      </header>
+      <div className="vbg-custom-sequence__inspector-body" id={bodyId} hidden={collapsed}>
+        <dl className="vbg-custom-sequence__inspector-meta">
+          <div><dt>From</dt><dd>agent</dd></div>
+          <div><dt>To</dt><dd>{action.kind}</dd></div>
+          <div><dt>Type</dt><dd>call</dd></div>
+          <div><dt>Time</dt><dd>{formatTime(action.event.at)}</dd></div>
+          {duration && <div><dt>Duration</dt><dd>{duration}</dd></div>}
+        </dl>
+        <EventDetails event={action.event} fallback={action.detail} />
+      </div>
+    </aside>
+  );
+}
+
 export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
   const [density, setDensity] = useState<ReplayDensity>("key");
-  const [scale, setScale] = useState<ReplayTimeScale>("logical");
   const [selectedId, setSelectedId] = useState<string>();
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const model = useMemo(() => traceReplayModel(items, density), [density, items]);
   const overview = useMemo(() => overviewItems(model), [model]);
+  const selectedAction = useMemo(() => model.blocks
+    .flatMap((block) => block.type === "execution" ? block.actions : [])
+    .find((action) => action.id === selectedId), [model.blocks, selectedId]);
   const actualTimingAvailable = useMemo(() => overviewHasActualTiming(overview), [overview]);
-  const effectiveScale: ReplayTimeScale = scale === "actual" && !actualTimingAvailable ? "logical" : scale;
+  const effectiveScale: ReplayTimeScale = actualTimingAvailable ? "actual" : "logical";
+
+  useEffect(() => {
+    if (selectedId && !overview.some((item) => item.id === selectedId)) {
+      setSelectedId(undefined);
+      setInspectorCollapsed(false);
+    }
+  }, [overview, selectedId]);
+
+  const closeInspector = () => {
+    const actionId = selectedAction?.id;
+    setSelectedId(undefined);
+    setInspectorCollapsed(false);
+    if (actionId) {
+      requestAnimationFrame(() => document.getElementById(`replay-action-trigger-${actionId}`)?.focus());
+    }
+  };
+
+  const selectAction = (id: string) => {
+    if (selectedId === id) {
+      closeInspector();
+      return;
+    }
+    setSelectedId(id);
+    setInspectorCollapsed(false);
+  };
 
   const selectOverviewItem = (id: string) => {
     if (selectedId === id) {
@@ -359,56 +459,62 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
   };
 
   return (
-    <section aria-label="Execution replay" className="vbg-custom-replay">
+    <section
+      aria-label="Execution replay"
+      className="vbg-custom-replay"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && selectedAction) {
+          event.preventDefault();
+          closeInspector();
+        }
+      }}
+    >
       <div className="vbg-custom-replay-head">
         <header className="vbg-custom-replay-toolbar">
-          <div aria-label="Replay event density" className="vbg-custom-segmented" role="group">
-            <button aria-pressed={density === "key"} onClick={() => setDensity("key")} type="button">Key events</button>
-            <button aria-pressed={density === "all"} onClick={() => setDensity("all")} type="button">All events</button>
-          </div>
-          <div aria-label="Overview scale" className="vbg-custom-segmented" role="group">
-            <button
-              aria-pressed={effectiveScale === "actual"}
-              disabled={!actualTimingAvailable}
-              onClick={() => setScale("actual")}
-              title={actualTimingAvailable ? "Show event positions on the turn timeline" : "Lifecycle timing is unavailable"}
-              type="button"
-            >Timeline</button>
-            <button
-              aria-pressed={effectiveScale === "logical"}
-              onClick={() => setScale("logical")}
-              title="Show execution order; width is relative within each lane"
-              type="button"
-            >Sequence</button>
-          </div>
-          <span>{model.visible} / {model.total}</span>
+          <DensitySwitch
+            checked={density === "all"}
+            label="Show all replay events"
+            onChange={(checked) => setDensity(checked ? "all" : "key")}
+            total={model.total}
+            visible={model.visible}
+          />
         </header>
         <ReplayOverview items={overview} onSelect={selectOverviewItem} scale={effectiveScale} selectedId={selectedId} />
       </div>
-      <ol className="vbg-custom-replay-stream">
-        {model.blocks.map((block) => block.type === "execution" ? (
-          <li className="vbg-custom-replay-execution-block" key={block.id}>
-            <ExecutionGroup actions={block.actions} selectedId={selectedId} />
-          </li>
-        ) : (
-          <li
-            className={`vbg-custom-replay-message vbg-custom-replay-message--${block.node.kind}`}
-            data-selected={selectedId === block.id || undefined}
-            id={block.id}
-            key={block.id}
-          >
-            <article>
-              <header>
-                <span className="vbg-custom-replay-message__role">{block.node.label}</span>
-                <strong>{block.node.title}</strong>
-                <time dateTime={block.event.at}>{formatTime(block.event.at)}</time>
-                <StatusMark label={false} status={block.event.status} />
-              </header>
-              <EventDetails event={block.event} fallback={block.node.detail} />
-            </article>
-          </li>
-        ))}
-      </ol>
+      <div className={`vbg-custom-replay-workspace${selectedAction ? " vbg-custom-replay-workspace--with-inspector" : ""}`}>
+        <ol className="vbg-custom-replay-stream">
+          {model.blocks.map((block) => block.type === "execution" ? (
+            <li className="vbg-custom-replay-execution-block" key={block.id}>
+              <ExecutionGroup actions={block.actions} selectedId={selectedId} onSelectAction={selectAction} />
+            </li>
+          ) : (
+            <li
+              className={`vbg-custom-replay-message vbg-custom-replay-message--${block.node.kind}`}
+              data-selected={selectedId === block.id || undefined}
+              id={block.id}
+              key={block.id}
+            >
+              <article>
+                <header>
+                  <span className="vbg-custom-replay-message__role">{block.node.label}</span>
+                  <strong>{block.node.title}</strong>
+                  <time dateTime={block.event.at}>{formatTime(block.event.at)}</time>
+                  <StatusMark label={false} status={block.event.status} />
+                </header>
+                <EventDetails event={block.event} fallback={block.node.detail} />
+              </article>
+            </li>
+          ))}
+        </ol>
+        {selectedAction && (
+          <ReplayActionInspector
+            action={selectedAction}
+            collapsed={inspectorCollapsed}
+            onClose={closeInspector}
+            onToggle={() => setInspectorCollapsed((current) => !current)}
+          />
+        )}
+      </div>
     </section>
   );
 }

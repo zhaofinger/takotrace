@@ -4,6 +4,7 @@ import { DetailPanel } from "./components/DetailPanel";
 import { Header } from "./components/Header";
 import { ThreadSidebar } from "./components/ThreadSidebar";
 import { Timeline } from "./components/Timeline";
+import { nextThemePreference, readThemePreference, THEME_STORAGE_KEY } from "./theme";
 import type { AppState, SnapshotEvent, TraceEvent, Turn } from "./types";
 
 const initialState: AppState = {
@@ -17,6 +18,7 @@ function isSnapshot(value: TraceEvent | SnapshotEvent): value is SnapshotEvent {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(readThemePreference);
   const [state, setState] = useState<AppState>(initialState);
   const [selectedThreadId, setSelectedThreadId] = useState<string>();
   const [selectedTurnId, setSelectedTurnId] = useState<string>();
@@ -29,6 +31,23 @@ export default function App() {
   const refreshTimer = useRef<number | undefined>(undefined);
   const syncingThreadIds = useRef(new Set<string>());
   const turnDetailRequestToken = useRef(0);
+
+  useEffect(() => {
+    document.body.classList.toggle("light", theme === "light");
+    document.body.classList.toggle("dark", theme === "dark");
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Theme switching still works for this session when storage is unavailable.
+    }
+    window.dispatchEvent(new Event("threadscope:themechange"));
+
+    if (theme !== "auto") return;
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => window.dispatchEvent(new Event("threadscope:themechange"));
+    colorScheme.addEventListener("change", handleChange);
+    return () => colorScheme.removeEventListener("change", handleChange);
+  }, [theme]);
 
   const loadState = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -155,7 +174,11 @@ export default function App() {
   return (
     <div className="vbg-custom-app-shell">
       <a className="vbg-skip-link" href="#main">Skip to content</a>
-      <Header connection={state.connection} />
+      <Header
+        connection={state.connection}
+        onThemeChange={() => setTheme((current) => nextThemePreference(current))}
+        theme={theme}
+      />
       {loadError && (
         <div className="vbg-custom-error-banner" role="alert">
           <span>{loadError}</span>

@@ -76,7 +76,7 @@ describe("MarkdownContent", () => {
     expect(visualization).toContain('src="/api/visualization?path=%2FUsers%2Fexample%2F.codex%2Fvisualizations%2Fthread%2Fpreview.png"');
   });
 
-  it("renders localImage blocks attached to user prompts", () => {
+  it("renders camelCase and snake_case local image blocks attached to user prompts", () => {
     const markup = renderToStaticMarkup(createElement(EventDetails, {
       event: {
         seq: 1,
@@ -93,6 +93,7 @@ describe("MarkdownContent", () => {
           content: [
             { type: "text", text: "Prompt" },
             { type: "localImage", path: "/tmp/prompt.png" },
+            { type: "local_image", path: "/tmp/reference.png" },
           ],
         },
       },
@@ -103,5 +104,8 @@ describe("MarkdownContent", () => {
     expect(markup).toContain('aria-label="User attachments"');
     expect(markup).toContain('src="/api/attachments/thread%20space/turn%20space/item%20space/1"');
     expect(markup).toContain('alt="prompt.png"');
+    expect(markup).toContain('src="/api/attachments/thread%20space/turn%20space/item%20space/2"');
+    expect(markup).toContain('alt="reference.png"');
+    expect(markup).toContain('target="_blank"');
   });
 });

@@ -58,4 +58,6 @@ npm run build
 - `POST /api/threads/:id/turns`：启动 Turn，请求体至少包含 `text`。
 - `GET /healthz`：服务健康检查。
 
-数据仅保存在内存中。服务通过 App Server 的 `thread/list` 和 `thread/read` 接口加载历史：默认保留最近 100 个 Thread 的元数据、完整加载最近 5 个，并每 10 秒刷新；用户选中的 Thread 会按需完整加载。外部 Codex Desktop 会话属于可能滞后的近实时快照，只有当前 ThreadScope 实例管理的会话能获得精确实时通知。服务不直接读取或修改 Codex 私有会话文件，未知协议事件会保留原始数据并安全处理。
+数据仅保存在内存中。服务通过 App Server 的 `thread/list` 和 `thread/read` 接口加载历史：默认保留最近 100 个 Thread 的元数据、完整加载最近 5 个，并每 10 秒刷新；用户选中的 Thread 会按需完整加载。外部 Codex Desktop 会话属于可能滞后的近实时快照，只有当前 ThreadScope 实例管理的会话能获得精确实时通知。
+
+App Server 是主数据源。当完整 `thread/read` 因版本不兼容或存储项反序列化失败时，服务会只读解析匹配的 `~/.codex/sessions` 或 `~/.codex/archived_sessions` rollout JSONL，按 `turn_id` 恢复历史，并在界面标记 `Rollout fallback`。该回退不会写入 Codex 文件，会跳过未知或损坏行；文件回退也不可用时才降级为仅显示线程元数据。

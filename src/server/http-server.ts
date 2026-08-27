@@ -234,7 +234,7 @@ export class ThreadScopeServer {
     const raw = traceItemRaw(event?.raw);
     const content = Array.isArray(raw.content) ? raw.content : [];
     const attachment = recordValue(content[contentIndex]);
-    const pathname = attachment.type === 'localImage' && typeof attachment.path === 'string'
+    const pathname = (attachment.type === 'localImage' || attachment.type === 'local_image') && typeof attachment.path === 'string'
       ? attachment.path
       : undefined;
     if (!pathname || !existsSync(pathname) || !statSync(pathname).isFile()) {
@@ -379,5 +379,5 @@ function sourceViewerHtml(name: string, contents: string): string {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(name)}</title><style>html{color-scheme:dark}body{margin:0;padding:24px;background:#0a0a0a;color:#e8e8e8;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}</style><pre>${escape(contents)}</pre>`;
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>${escape(name)}</title><style>html{color-scheme:light dark}body{margin:0;padding:24px;background:Canvas;color:CanvasText;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}</style><pre>${escape(contents)}</pre>`;
 }

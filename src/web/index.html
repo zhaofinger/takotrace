@@ -14,7 +14,13 @@
     />
     <title>ThreadScope</title>
   </head>
-  <body class="vbg-report">
+  <body class="vbg-report" data-theme="auto">
+    <script>
+      try {
+        const theme = localStorage.getItem("thread-scope-theme");
+        if (theme === "light" || theme === "dark") document.body.classList.add(theme);
+      } catch {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/main.tsx"></script>
   </body>

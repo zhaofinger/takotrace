@@ -1,7 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import type { CompactTurn, Turn } from "../types";
 import ExecutionReplay from "./ExecutionReplay";
-import { InteractionFlow } from "./InteractionFlow";
+import { SequenceDiagram } from "./SequenceDiagram";
 import { StatusMark } from "./StatusMark";
 
 function formatDate(value?: string): string {
@@ -31,7 +31,7 @@ export function DetailPanel({
   threadId?: string;
   turn?: CompactTurn | Turn;
 }) {
-  const [tab, setTab] = useState<"trace" | "events" | "json">("trace");
+  const [tab, setTab] = useState<"trace" | "sequence" | "json">("trace");
   const raw = useMemo(() => turn ? JSON.stringify(turn, null, 2) : "", [turn]);
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -64,17 +64,17 @@ export function DetailPanel({
           Trace
         </button>
         <button
-          aria-controls="turn-events-panel"
-          aria-selected={tab === "events"}
-          className={tab === "events" ? "vbg-custom-is-active" : ""}
-          id="turn-events-tab"
+          aria-controls="turn-sequence-panel"
+          aria-selected={tab === "sequence"}
+          className={tab === "sequence" ? "vbg-custom-is-active" : ""}
+          id="turn-sequence-tab"
           onKeyDown={handleTabKey}
-          onClick={() => setTab("events")}
+          onClick={() => setTab("sequence")}
           role="tab"
-          tabIndex={tab === "events" ? 0 : -1}
+          tabIndex={tab === "sequence" ? 0 : -1}
           type="button"
         >
-          Events
+          Sequence
         </button>
         <button
           aria-controls="turn-json-panel"
@@ -103,9 +103,9 @@ export function DetailPanel({
       ) : (
         <div
           aria-busy={isLoading}
-          aria-labelledby={tab === "trace" ? "turn-trace-tab" : "turn-events-tab"}
+          aria-labelledby={tab === "trace" ? "turn-trace-tab" : "turn-sequence-tab"}
           className="vbg-custom-detail__content"
-          id={tab === "trace" ? "turn-trace-panel" : "turn-events-panel"}
+          id={tab === "trace" ? "turn-trace-panel" : "turn-sequence-panel"}
           role="tabpanel"
           tabIndex={0}
         >
@@ -145,7 +145,7 @@ export function DetailPanel({
                 <div><dt>Duration</dt><dd title={turn.durationMs === undefined ? undefined : `${turn.durationMs}ms`}>{formatDuration(turn.durationMs)}</dd></div>
                 <div><dt>Items</dt><dd>{"itemCount" in turn ? turn.itemCount : turn.items.length}</dd></div>
               </dl>
-              {tab === "trace" ? <ExecutionReplay items={turn.items} /> : <InteractionFlow items={turn.items} />}
+              {tab === "trace" ? <ExecutionReplay items={turn.items} /> : <SequenceDiagram items={turn.items} />}
             </>
           )}
         </div>

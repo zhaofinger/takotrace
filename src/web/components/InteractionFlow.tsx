@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { CompactTraceEvent, TraceEvent } from "../types";
 import { EventDetails } from "./EventDetails";
 import { Icon } from "./Icon";
+import type { IconName } from "./Icon";
 import { StatusMark } from "./StatusMark";
 
 export type FlowEvent = CompactTraceEvent | TraceEvent;
@@ -24,6 +25,7 @@ export interface FlowNode {
   detail: string;
   meta?: string;
   showStatus?: boolean;
+  sequenceDirection?: "call" | "return";
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -32,6 +34,26 @@ function record(value: unknown): Record<string, unknown> {
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizedToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function subagentName(raw: Record<string, unknown>): string | undefined {
+  const agents = Array.isArray(raw.receiverAgents)
+    ? raw.receiverAgents
+    : Array.isArray(raw.receiver_agents)
+      ? raw.receiver_agents
+      : [];
+  const namedAgent = agents.map(record).map((agent) => (
+    text(agent.agentNickname)
+    ?? text(agent.agent_nickname)
+    ?? text(agent.agentPath)
+    ?? text(agent.agent_path)
+  )).find(Boolean);
+  const path = namedAgent ?? text(raw.agentPath) ?? text(raw.agent_path);
+  return path?.split("/").filter(Boolean).pop();
 }
 
 function rawOf(event: FlowEvent): Record<string, unknown> {
@@ -110,20 +132,59 @@ export function flowNode(event: FlowEvent): FlowNode {
   }
   if (type === "subagentactivity") {
     const kind = text(raw.kind) ?? "activity";
-    const path = text(raw.agentPath) ?? "Subagent";
-    return { kind: "subagent", label: "Subagent", title: `${kind[0].toUpperCase()}${kind.slice(1)} · ${path.split("/").pop()}`, detail: path, meta: text(raw.agentThreadId) };
+    const normalizedKind = normalizedToken(kind);
+    const path = text(raw.agentPath) ?? text(raw.agent_path) ?? "Subagent";
+    const name = subagentName(raw) ?? "Subagent";
+    const activity = ({
+      started: { label: "Start", title: "Started", direction: "call" },
+      interacted: { label: "Update", title: "Update", direction: "return" },
+      completed: { label: "Result", title: "Result", direction: "return" },
+      interrupted: { label: "Interrupted", title: "Interrupted", direction: "return" },
+      failed: { label: "Failed", title: "Failed", direction: "return" },
+    } as Record<string, { label: string; title: string; direction: "call" | "return" }>)[normalizedKind];
+    const fallbackTitle = `${kind[0].toUpperCase()}${kind.slice(1)}`;
+    return {
+      kind: "subagent",
+      label: activity?.label ?? "Subagent",
+      title: `${activity?.title ?? fallbackTitle} · ${name}`,
+      detail: path,
+      meta: text(raw.agentThreadId) ?? text(raw.agent_thread_id),
+      sequenceDirection: activity?.direction ?? "call",
+    };
   }
   if (type === "collabagenttoolcall") {
     const tool = text(raw.tool) ?? "collaboration";
-    const action = ({ spawnagent: "Fork", sendinput: "Message", resumeagent: "Resume", wait: "Join", closeagent: "Close" } as Record<string, string>)[tool.toLowerCase()] ?? tool;
-    const receivers = Array.isArray(raw.receiverThreadIds) ? raw.receiverThreadIds.filter((value): value is string => typeof value === "string") : [];
+    const normalizedTool = normalizedToken(tool);
+    const action = ({
+      spawnagent: "Fork",
+      sendinput: "Message",
+      sendmessage: "Message",
+      followuptask: "Message",
+      resumeagent: "Resume",
+      wait: "Join",
+      waitagent: "Join",
+      interruptagent: "Interrupt",
+      closeagent: "Close",
+    } as Record<string, string>)[normalizedTool] ?? tool;
+    const receiverValues = Array.isArray(raw.receiverThreadIds)
+      ? raw.receiverThreadIds
+      : Array.isArray(raw.receiver_thread_ids)
+        ? raw.receiver_thread_ids
+        : [];
+    const receivers = receiverValues.filter((value): value is string => typeof value === "string");
+    const name = subagentName(raw);
+    const target = name ?? (receivers.length > 1 ? `${receivers.length} subagents` : undefined);
+    const title = action === "Join"
+      ? target ? `Join · ${target}` : "Join subagents"
+      : target ? `${action} · ${target}` : action;
     return {
       kind: "subagent",
       label: action,
-      title: "Subagent · collaboration",
+      title,
       detail: text(raw.prompt) ?? (receivers.length ? `Targets: ${receivers.join(", ")}` : fallback),
       meta: text(raw.model) ?? undefined,
       showStatus: true,
+      sequenceDirection: "call",
     };
   }
   if (type === "commandexecution") {
@@ -185,14 +246,14 @@ export function mergeFlowEvents(items: FlowEvent[]): FlowEvent[] {
   return [...merged.values()].sort((left, right) => left.seq - right.seq);
 }
 
-function iconName(kind: FlowKind): "activity" | "chevron" | "code" | "message" | "search" | "tool" {
-  if (kind === "user" || kind === "agent") return "message";
-  if (kind === "reasoning") return "activity";
-  if (kind === "subagent") return "chevron";
-  if (kind === "skill") return "code";
-  if (kind === "file") return "code";
+export function flowKindIconName(kind: FlowKind): IconName {
+  if (kind === "user") return "user";
+  if (kind === "agent" || kind === "reasoning") return "agent";
+  if (kind === "mcp") return "network";
+  if (kind === "subagent") return "subagent";
+  if (kind === "skill" || kind === "file") return "code";
   if (kind === "web") return "search";
-  return "tool";
+  return "terminal";
 }
 
 export function flowLane(kind: FlowKind): FlowLane {
@@ -226,7 +287,7 @@ export function InteractionFlow({ items }: { items: FlowEvent[] }) {
             className={`vbg-custom-flow-node vbg-custom-flow-node--${node.kind}`}
             key={event.seq}
           >
-            <div className="vbg-custom-flow-node__rail"><span><Icon name={iconName(node.kind)} /></span></div>
+            <div className="vbg-custom-flow-node__rail"><span><Icon name={flowKindIconName(node.kind)} /></span></div>
             <article>
               <header>
                 <span className="vbg-custom-flow-node__step">{index + 1}</span>

@@ -41,6 +41,7 @@ export class TraceStore {
         title: thread.title,
         status: thread.status,
         turnsLoaded: thread.turnsLoaded,
+        historySource: thread.historySource,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
         cwd: thread.cwd,
@@ -160,6 +161,7 @@ export class TraceStore {
       thread.title = history.title;
       thread.createdAt = history.createdAt;
       thread.turnsLoaded ||= history.turnsLoaded;
+      thread.historySource = history.historySource ?? thread.historySource;
       thread.cwd = history.cwd ?? thread.cwd;
       thread.projectFolder = history.projectFolder ?? thread.projectFolder;
       if (history.updatedAt >= thread.updatedAt && !this.liveThreadIds.has(history.id)) {

@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { JsonlParser } from '../shared/jsonl.js';
 import type { RpcMessage, RpcNotification, RpcResponse } from '../shared/types.js';
+import { readRolloutThread, rolloutSourceName } from './rollout-reader.js';
 
 export interface CodexClientOptions {
   command?: string;
@@ -12,6 +13,7 @@ export interface CodexClientOptions {
   historyRefreshMs?: number;
   historyPageSize?: number;
   historyThreadLimit?: number;
+  codexHome?: string;
 }
 
 export interface ThreadStartInput {
@@ -130,6 +132,22 @@ export class CodexClient {
       return await this.request('thread/read', { threadId, includeTurns: true }, timeoutMs);
     } catch (error) {
       if (this.isDeserializationOrCorruptError(error)) {
+        try {
+          const fallback = await readRolloutThread(threadId, { codexHome: this.options.codexHome });
+          if (fallback) {
+            const turnCount = Array.isArray(fallback.thread.turns) ? fallback.thread.turns.length : 0;
+            this.emitter.emit('stderr', `Warning: failed to read thread ${threadId} with turns: ${error instanceof Error ? error.message : error}. Recovered ${turnCount} turns from ${rolloutSourceName(fallback)}.\n`);
+            try {
+              const metadata = record(await this.request('thread/read', { threadId, includeTurns: false }, timeoutMs));
+              return { ...metadata, thread: { ...fallback.thread, ...record(metadata.thread), turns: fallback.thread.turns } };
+            } catch (metadataError) {
+              this.emitter.emit('stderr', `Warning: metadata refresh failed for rollout thread ${threadId}: ${metadataError instanceof Error ? metadataError.message : metadataError}.\n`);
+              return { thread: fallback.thread };
+            }
+          }
+        } catch (fallbackError) {
+          this.emitter.emit('stderr', `Warning: rollout fallback failed for thread ${threadId}: ${fallbackError instanceof Error ? fallbackError.message : fallbackError}.\n`);
+        }
         this.emitter.emit('stderr', `Warning: failed to read thread ${threadId} with turns: ${error instanceof Error ? error.message : error}. Falling back to includeTurns: false.\n`);
         return this.request('thread/read', { threadId, includeTurns: false }, timeoutMs);
       }
@@ -303,7 +321,12 @@ function numberField(value: unknown, key: string): number {
 }
 
 function withTurnsLoaded(value: unknown, turnsLoaded: boolean): Record<string, unknown> {
-  return { ...record(value), turnsLoaded };
+  const current = record(value);
+  return {
+    ...current,
+    turnsLoaded,
+    ...(turnsLoaded && current.historySource === undefined ? { historySource: 'app-server' } : {}),
+  };
 }
 
 async function mapLimit<T, R>(values: T[], concurrency: number, mapper: (value: T) => Promise<R>): Promise<R[]> {

@@ -161,7 +161,9 @@ export function Timeline({
         </tbody>
       </table>
       <footer className="vbg-custom-timeline__footer">
-        {isLoading ? "Loading thread history…" : `Showing ${turns.length} turn${turns.length === 1 ? "" : "s"}`}
+        {isLoading
+          ? "Loading thread history…"
+          : `Showing ${turns.length} turn${turns.length === 1 ? "" : "s"} · ${thread?.historySource === "rollout-file" ? "Rollout fallback" : "App Server"}`}
       </footer>
     </main>
   );

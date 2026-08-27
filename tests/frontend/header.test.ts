@@ -10,11 +10,14 @@ describe('Header', () => {
         status: 'connected',
         userAgent: 'thread-scope/test-client',
       },
+      onThemeChange: () => {},
+      theme: 'auto',
     }));
 
     expect(markup).toContain('Connected');
     expect(markup).toContain('Desktop snapshots · near real-time');
     expect(markup).toContain('thread-scope/test-client');
     expect(markup).toContain('127.0.0.1');
+    expect(markup).toContain('Theme: System. Switch to Light');
   });
 });

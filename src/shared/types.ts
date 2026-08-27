@@ -1,5 +1,6 @@
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 export type EntityStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type HistorySource = 'app-server' | 'rollout-file';
 
 export interface TraceEvent {
   seq: number;
@@ -32,6 +33,7 @@ export interface ThreadState {
   title: string;
   status: EntityStatus;
   turnsLoaded: boolean;
+  historySource?: HistorySource;
   createdAt: string;
   updatedAt: string;
   cwd?: string;
@@ -80,6 +82,7 @@ export interface HistoricalThread {
   title: string;
   status: EntityStatus;
   turnsLoaded: boolean;
+  historySource?: HistorySource;
   createdAt: string;
   updatedAt: string;
   cwd?: string;

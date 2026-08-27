@@ -139,6 +139,9 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
     title: stringAt(thread, ['name'], ['preview']) ?? `Thread ${id.slice(0, 8)}`,
     status: entityStatus(thread.status),
     turnsLoaded: thread.turnsLoaded === true,
+    historySource: thread.historySource === 'rollout-file' || thread.historySource === 'app-server'
+      ? thread.historySource
+      : undefined,
     createdAt,
     updatedAt,
     cwd,

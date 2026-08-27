@@ -1,0 +1,87 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { readRolloutThread } from '../../src/server/rollout-reader.js';
+
+const THREAD_ID = '01a03900-5582-7a11-bd8d-a594d4ed8c91';
+const TURN_ID = '01a03900-f4e5-7c61-895b-e5b5dd692d83';
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+});
+
+describe('rollout reader', () => {
+  it('recovers turns from sessions while merging duplicate contexts and skipping invalid lines', async () => {
+    const codexHome = await temporaryCodexHome();
+    const directory = join(codexHome, 'sessions', '2026', '08', '25');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${THREAD_ID}.jsonl`), [
+      entry('session_meta', { id: THREAD_ID, timestamp: '2026-08-25T12:58:38.000Z', cwd: '/tmp/project', cli_version: '0.150.0' }),
+      entry('event_msg', { type: 'task_started', turn_id: TURN_ID, started_at: 1_767_000_000 }),
+      entry('turn_context', { turn_id: TURN_ID }),
+      entry('turn_context', { turn_id: TURN_ID }),
+      '{broken json',
+      entry('unknown_event', { value: 'ignored' }),
+      entry('event_msg', {
+        type: 'item_completed',
+        turn_id: TURN_ID,
+        started_at_ms: 1_767_000_000_000,
+        completed_at_ms: 1_767_000_000_010,
+        item: { id: 'user-1', type: 'UserMessage', content: [{ type: 'Text', text: 'Build it' }] },
+      }),
+      entry('event_msg', {
+        type: 'item_completed',
+        turn_id: TURN_ID,
+        item: { id: 'subagent-1', type: 'SubAgentActivity', kind: 'completed', agent_thread_id: 'child-1' },
+      }),
+      entry('event_msg', { type: 'task_complete', turn_id: TURN_ID, started_at: 1_767_000_000, completed_at: 1_767_000_003, duration_ms: 3_000 }),
+      '{"type":"event_msg"',
+    ].join('\n'));
+
+    const result = await readRolloutThread(THREAD_ID, { codexHome });
+
+    expect(result?.thread.turns).toHaveLength(1);
+    expect(result?.thread.preview).toBe('Build it');
+    expect(result?.thread.cwd).toBe('/tmp/project');
+    expect(result?.thread.historySource).toBe('rollout-file');
+    const turn = (result?.thread.turns as Array<Record<string, unknown>>)[0];
+    expect(turn).toMatchObject({ id: TURN_ID, status: 'completed', durationMs: 3_000 });
+    expect(turn.items).toEqual([
+      expect.objectContaining({ id: 'user-1', type: 'userMessage', durationMs: 10 }),
+      expect.objectContaining({ id: 'subagent-1', type: 'subAgentActivity', kind: 'completed', agentThreadId: 'child-1' }),
+    ]);
+  });
+
+  it('loads archived session files', async () => {
+    const codexHome = await temporaryCodexHome();
+    const directory = join(codexHome, 'archived_sessions');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${THREAD_ID}.jsonl`), [
+      entry('session_meta', { id: THREAD_ID, timestamp: '2026-08-25T12:58:38.000Z' }),
+      entry('event_msg', { type: 'task_started', turn_id: TURN_ID, started_at: 1_767_000_000 }),
+      entry('event_msg', { type: 'task_complete', turn_id: TURN_ID, completed_at: 1_767_000_003 }),
+    ].join('\n'));
+
+    const result = await readRolloutThread(THREAD_ID, { codexHome });
+
+    expect(result?.source).toContain('/archived_sessions/');
+    expect(result?.thread.turns).toHaveLength(1);
+  });
+
+  it('rejects non-Codex ids without touching arbitrary paths', async () => {
+    const codexHome = await temporaryCodexHome();
+    await expect(readRolloutThread('../sessions/secret', { codexHome })).resolves.toBeUndefined();
+  });
+});
+
+async function temporaryCodexHome(): Promise<string> {
+  const path = await mkdtemp(join(tmpdir(), 'thread-scope-rollout-'));
+  temporaryDirectories.push(path);
+  return path;
+}
+
+function entry(type: string, payload: Record<string, unknown>): string {
+  return JSON.stringify({ timestamp: '2026-08-25T12:58:38.000Z', type, payload });
+}

@@ -1,5 +1,6 @@
 import { Graph, NodeEvent } from "@antv/g6";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DensitySwitch } from "./DensitySwitch";
 import { EventDetails } from "./EventDetails";
 import { flowNode } from "./InteractionFlow";
 import type { FlowEvent } from "./InteractionFlow";
@@ -9,13 +10,15 @@ import { graphNodeVisual, isPrimaryGraphKind } from "./trace-graph-visual";
 import { StatusMark } from "./StatusMark";
 
 interface GraphPalette {
-  amberSoft: string;
   background: string;
-  blueSoft: string;
   border: string;
   error: string;
   focus: string;
-  greenSoft: string;
+  roleAgent: string;
+  roleMcp: string;
+  roleSubagent: string;
+  roleTool: string;
+  roleUser: string;
   primary: string;
   surface: string;
   success: string;
@@ -34,13 +37,15 @@ function cssColor(container: HTMLElement, variable: string): string {
 
 function palette(container: HTMLElement): GraphPalette {
   return {
-    amberSoft: cssColor(container, "--vbg-amber-100"),
     background: cssColor(container, "--vbg-surface-primary"),
-    blueSoft: cssColor(container, "--vbg-blue-100"),
     border: cssColor(container, "--vbg-border-strong"),
     error: cssColor(container, "--vbg-color-error"),
     focus: cssColor(container, "--vbg-focus"),
-    greenSoft: cssColor(container, "--vbg-green-100"),
+    roleAgent: cssColor(container, "--vbg-role-agent-bg"),
+    roleMcp: cssColor(container, "--vbg-role-mcp-bg"),
+    roleSubagent: cssColor(container, "--vbg-role-subagent-bg"),
+    roleTool: cssColor(container, "--vbg-role-tool-bg"),
+    roleUser: cssColor(container, "--vbg-role-user-bg"),
     primary: cssColor(container, "--vbg-text-primary"),
     surface: cssColor(container, "--vbg-surface-secondary"),
     success: cssColor(container, "--vbg-color-success"),
@@ -60,10 +65,11 @@ function label(node: TraceGraphNode): string {
 }
 
 function typeFill(kind: TraceGraphNode["kind"], colors: GraphPalette): string {
-  if (kind === "user" || kind === "subagent" || kind === "web") return colors.blueSoft;
-  if (kind === "skill") return colors.greenSoft;
-  if (kind === "mcp") return colors.amberSoft;
-  if (kind === "agent") return colors.surface;
+  if (kind === "user") return colors.roleUser;
+  if (kind === "agent" || kind === "reasoning") return colors.roleAgent;
+  if (kind === "mcp" || kind === "skill") return colors.roleMcp;
+  if (kind === "subagent") return colors.roleSubagent;
+  if (kind === "tool" || kind === "file" || kind === "web") return colors.roleTool;
   return colors.background;
 }
 
@@ -82,7 +88,14 @@ export default function TraceGraph({ items }: { items: FlowEvent[] }) {
   const [deferredModel, setDeferredModel] = useState<typeof liveModel>();
   const model = deferredModel ?? { nodes: [], edges: [], total: liveModel.total };
   const [selectedId, setSelectedId] = useState<string>();
+  const [themeRevision, setThemeRevision] = useState(0);
   const selected = model.nodes.find((node) => node.id === selectedId) ?? model.nodes[0];
+
+  useEffect(() => {
+    const handleThemeChange = () => setThemeRevision((current) => current + 1);
+    window.addEventListener("threadscope:themechange", handleThemeChange);
+    return () => window.removeEventListener("threadscope:themechange", handleThemeChange);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDeferredModel(liveModel), 120);
@@ -210,7 +223,7 @@ export default function TraceGraph({ items }: { items: FlowEvent[] }) {
       if (renderSettled) graph.destroy();
       graphRef.current = undefined;
     };
-  }, [model]);
+  }, [model, themeRevision]);
 
   const zoom = (ratio: number) => {
     const graph = graphRef.current;
@@ -220,11 +233,13 @@ export default function TraceGraph({ items }: { items: FlowEvent[] }) {
   return (
     <section className="vbg-custom-trace-graph" aria-label="Conversation graph">
       <div className="vbg-custom-graph-toolbar">
-        <div aria-label="Graph event density" className="vbg-custom-segmented" role="group">
-          <button aria-pressed={density === "key"} onClick={() => setDensity("key")} type="button">Key events</button>
-          <button aria-pressed={density === "all"} onClick={() => setDensity("all")} type="button">All events</button>
-        </div>
-        <span>{model.nodes.length} / {model.total}</span>
+        <DensitySwitch
+          checked={density === "all"}
+          label="Show all graph events"
+          onChange={(checked) => setDensity(checked ? "all" : "key")}
+          total={model.total}
+          visible={model.nodes.length}
+        />
         <div className="vbg-custom-graph-controls">
           <button aria-label="Zoom out" onClick={() => zoom(0.8)} type="button">−</button>
           <button aria-label="Fit graph" onClick={() => void graphRef.current?.fitView({}, { duration: 180 })} type="button">Fit</button>

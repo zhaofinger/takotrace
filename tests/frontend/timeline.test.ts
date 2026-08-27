@@ -87,6 +87,7 @@ describe('turnSummary', () => {
       title: 'Thread title',
       status: 'completed',
       turnsLoaded: true,
+      historySource: 'rollout-file',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       turns: [],
@@ -101,6 +102,7 @@ describe('turnSummary', () => {
     expect(markup).toContain('aria-label="Copy thread ID"');
     expect(markup).toContain('<main aria-label="Turns"');
     expect(markup).not.toContain('<h2>Turns</h2>');
+    expect(markup).toContain('Rollout fallback');
   });
 });
 

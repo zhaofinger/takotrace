@@ -171,7 +171,7 @@ function SubagentDetails({ raw }: { raw: RecordValue }) {
 
 function UserMessageDetails({ event, fallback, raw }: { event: DetailEvent; fallback: string; raw: RecordValue }) {
   const content = Array.isArray(raw.content) ? raw.content.map(record) : [];
-  const images = content.flatMap((entry, index) => entry.type === "localImage" && text(entry.path)
+  const images = content.flatMap((entry, index) => (entry.type === "localImage" || entry.type === "local_image") && text(entry.path)
     ? [{ index, path: text(entry.path)! }]
     : []);
   const canLoadImages = Boolean(event.turnId && event.itemId);
@@ -181,16 +181,16 @@ function UserMessageDetails({ event, fallback, raw }: { event: DetailEvent; fall
       <MarkdownContent>{fallback}</MarkdownContent>
       {images.length > 0 && (
         <div aria-label="User attachments" className="vbg-custom-user-attachments">
-          {images.map((image) => canLoadImages ? (
-            <img
-              alt={image.path.split("/").pop() ?? "User attachment"}
-              key={`${image.index}-${image.path}`}
-              loading="lazy"
-              src={`/api/attachments/${encodeURIComponent(event.threadId)}/${encodeURIComponent(event.turnId!)}/${encodeURIComponent(event.itemId!)}/${image.index}`}
-            />
-          ) : (
-            <span key={`${image.index}-${image.path}`}>Image attachment unavailable</span>
-          ))}
+          {images.map((image) => {
+            if (!canLoadImages) return <span key={`${image.index}-${image.path}`}>Image attachment unavailable</span>;
+            const source = `/api/attachments/${encodeURIComponent(event.threadId)}/${encodeURIComponent(event.turnId!)}/${encodeURIComponent(event.itemId!)}/${image.index}`;
+            const label = image.path.split("/").pop() ?? "User attachment";
+            return (
+              <a href={source} key={`${image.index}-${image.path}`} rel="noreferrer" target="_blank" title={`Open ${label}`}>
+                <img alt={label} loading="lazy" src={source} />
+              </a>
+            );
+          })}
         </div>
       )}
     </div>

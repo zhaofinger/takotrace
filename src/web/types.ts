@@ -50,6 +50,7 @@ export interface Thread {
   cwd?: string;
   status: TraceStatus;
   turnsLoaded: boolean;
+  historySource?: "app-server" | "rollout-file";
   createdAt: string;
   updatedAt: string;
   turns: CompactTurn[];
@@ -62,6 +63,7 @@ export interface ThreadDetail {
   projectFolder?: string;
   status: TraceStatus;
   turnsLoaded?: boolean;
+  historySource?: "app-server" | "rollout-file";
   createdAt: string;
   updatedAt: string;
   turns: Turn[];

@@ -234,7 +234,7 @@ describe('ThreadScopeServer', () => {
     expect((await fetch(`${base}${encodeURIComponent(outside)}`)).status).toBe(403);
   });
 
-  it('serves only localImage blocks referenced by a traced user message', async () => {
+  it('serves camelCase and snake_case local image blocks referenced by a traced user message', async () => {
     const actions: RpcActions = {
       startThread: async () => ({}),
       resumeThread: async () => ({}),
@@ -256,7 +256,11 @@ describe('ThreadScopeServer', () => {
       summary: 'Prompt with image',
       raw: {
         type: 'userMessage',
-        content: [{ type: 'text', text: 'Prompt with image' }, { type: 'localImage', path: image }],
+        content: [
+          { type: 'text', text: 'Prompt with image' },
+          { type: 'localImage', path: image },
+          { type: 'local_image', path: image },
+        ],
       },
     });
     const { host, port } = await server.listen();
@@ -267,7 +271,8 @@ describe('ThreadScopeServer', () => {
     expect(allowed.headers.get('content-type')).toBe('image/png');
     expect(Buffer.from(await allowed.arrayBuffer())).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     expect((await fetch(`${base}/0`)).status).toBe(404);
-    expect((await fetch(`${base}/2`)).status).toBe(404);
+    expect((await fetch(`${base}/2`)).status).toBe(200);
+    expect((await fetch(`${base}/3`)).status).toBe(404);
     expect((await fetch(`http://${host}:${port}/api/attachments/thread%20space/turn%20space/missing/1`)).status).toBe(404);
   });
 
@@ -296,6 +301,8 @@ describe('ThreadScopeServer', () => {
     expect(allowed.headers.get('content-type')).toBe('text/html; charset=utf-8');
     expect(allowed.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
     const html = await allowed.text();
+    expect(html).toContain('<meta name="color-scheme" content="light dark">');
+    expect(html).toContain('background:Canvas;color:CanvasText');
     expect(html).toContain('<pre># Local skill\n&lt;script&gt;alert(1)&lt;/script&gt;</pre>');
     expect(html).not.toContain('<script>alert(1)</script>');
     const rendered = await fetch(`${base}${Buffer.from(artifact).toString('hex')}`);
