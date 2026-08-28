@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { searchThreadsAndTurns } from '../../src/web/components/GlobalSearch.js';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  getGlobalSearchKeyboardAction,
+  GlobalSearch,
+  searchThreadsAndTurns,
+} from '../../src/web/components/GlobalSearch.js';
 import type { Thread } from '../../src/web/types.js';
 
 const threads: Thread[] = [
@@ -51,5 +57,39 @@ describe('searchThreadsAndTurns', () => {
   it('does not invent turn results for unloaded threads or an empty query', () => {
     expect(searchThreadsAndTurns(threads, 'Unloaded').turns).toEqual([]);
     expect(searchThreadsAndTurns(threads, '  ')).toEqual({ threads: [], turns: [] });
+  });
+});
+
+describe('GlobalSearch keyboard accessibility', () => {
+  it('moves through results with arrows and jumps with Home or End', () => {
+    expect(getGlobalSearchKeyboardAction('ArrowDown', -1, 3)).toEqual({ type: 'move', index: 0 });
+    expect(getGlobalSearchKeyboardAction('ArrowDown', 2, 3)).toEqual({ type: 'move', index: 0 });
+    expect(getGlobalSearchKeyboardAction('ArrowUp', -1, 3)).toEqual({ type: 'move', index: 2 });
+    expect(getGlobalSearchKeyboardAction('ArrowUp', 0, 3)).toEqual({ type: 'move', index: 2 });
+    expect(getGlobalSearchKeyboardAction('Home', 2, 3)).toEqual({ type: 'move', index: 0 });
+    expect(getGlobalSearchKeyboardAction('End', 0, 3)).toEqual({ type: 'move', index: 2 });
+  });
+
+  it('selects only an active option and dismisses with Escape', () => {
+    expect(getGlobalSearchKeyboardAction('Enter', 1, 3)).toEqual({ type: 'select', index: 1 });
+    expect(getGlobalSearchKeyboardAction('Enter', -1, 3)).toBeNull();
+    expect(getGlobalSearchKeyboardAction('Enter', 3, 3)).toBeNull();
+    expect(getGlobalSearchKeyboardAction('Escape', -1, 0)).toEqual({ type: 'dismiss' });
+    expect(getGlobalSearchKeyboardAction('ArrowDown', -1, 0)).toBeNull();
+    expect(getGlobalSearchKeyboardAction('Tab', -1, 3)).toBeNull();
+  });
+
+  it('exposes the input as a list-autocomplete combobox', () => {
+    const markup = renderToStaticMarkup(createElement(GlobalSearch, {
+      onSelectThread: vi.fn(),
+      onSelectTurn: vi.fn(),
+      threads,
+    }));
+
+    expect(markup).toContain('role="combobox"');
+    expect(markup).toContain('aria-autocomplete="list"');
+    expect(markup).toContain('aria-haspopup="listbox"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('aria-controls="threadscope-global-search-results-');
   });
 });

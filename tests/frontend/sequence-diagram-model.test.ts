@@ -53,9 +53,8 @@ describe("sequence-diagram-model", () => {
     expect(Object.values(SEQUENCE_PARTICIPANTS).map((participant) => participant.iconName)).toEqual([
       "user",
       "agent",
-      "code",
-      "terminal",
-      "network",
+      "tool",
+      "mcp",
       "subagent",
     ]);
   });
@@ -156,6 +155,7 @@ describe("sequence-diagram-model", () => {
       from: "agent",
       to: "mcp",
       toLabel: "node_repl",
+      displayIcon: "braces",
       displayTitle: "JavaScript",
     });
     expect(unnamed.steps[0]).toMatchObject({
@@ -165,7 +165,28 @@ describe("sequence-diagram-model", () => {
     expect(unnamed.steps[0].toLabel).toBeUndefined();
   });
 
-  it("renders inferred SKILL.md reads in the Skills lane", () => {
+  it("uses a Browser icon while preserving the full MCP title for details and export", () => {
+    const model = buildSequenceDiagramModel([
+      createEvent("mcpToolCall", {
+        server: "node_repl",
+        tool: "js",
+        arguments: {
+          title: "Inspect the page",
+          code: "await browser.tabs.list()",
+        },
+      }),
+    ]);
+
+    expect(model.steps[0]).toMatchObject({
+      displayIcon: "web",
+      displayTitle: "Inspect the page",
+      detailTitle: "Browser · Inspect the page",
+      exportTitle: "Browser · Inspect the page",
+    });
+    expect(exportMermaidSequence(model)).toContain("agent->>+mcp: Browser · Inspect the page");
+  });
+
+  it("renders inferred SKILL.md reads as Agent self steps", () => {
     const model = buildSequenceDiagramModel([
       createEvent("commandExecution", {
         command: ["/bin/zsh", "-lc", "cat /Users/bytedance/.agents/skills/read/SKILL.md"],
@@ -175,13 +196,17 @@ describe("sequence-diagram-model", () => {
 
     expect(model.steps[0]).toMatchObject({
       from: "agent",
-      to: "skill",
-      displayTitle: "Skill load · read (inferred)",
+      to: "agent",
+      type: "self",
+      displayIcon: "skill",
+      displayTitle: "read",
       detailTitle: "Skill load · read (inferred)",
+      exportTitle: "Skill load · read (inferred)",
       isCommand: false,
     });
-    expect(model.participants.map((participant) => participant.key)).toEqual(["user", "agent", "skill"]);
-    expect(exportMermaidSequence(model)).toContain("agent->>+skill: Skill load · read (inferred)");
+    expect(model.participants.map((participant) => participant.key)).toEqual(["user", "agent"]);
+    expect(exportMermaidSequence(model)).toContain("agent->>agent: Skill load · read (inferred)");
+    expect(exportMermaidSequence(model)).not.toContain("participant skill");
   });
 
   it("shows the subagent collaboration as outbound calls and inbound updates", () => {
@@ -257,8 +282,10 @@ describe("sequence-diagram-model", () => {
       createEvent("commandExecution", { command }),
     ]);
 
-    expect(model.steps[0].displayTitle).toBe("Shell · rg -n sequence src/web");
+    expect(model.steps[0].displayIcon).toBe("terminal");
+    expect(model.steps[0].displayTitle).toBe("rg -n sequence src/web");
     expect(model.steps[0].detailTitle).toBe("Shell · rg -n sequence src/web");
+    expect(model.steps[0].exportTitle).toBe("Shell · rg -n sequence src/web");
     expect(model.steps[0].detail).toBe(command);
     expect(exportMermaidSequence(model)).toContain("agent->>+tool: Shell · rg -n sequence src/web");
     expect(exportMermaidSequence(model)).not.toContain("/bin/zsh -lc");
@@ -270,7 +297,7 @@ describe("sequence-diagram-model", () => {
       createEvent("commandExecution", { command }),
     ]);
 
-    expect(model.steps[0].displayTitle).toBe("Shell · cat …/polish.md");
+    expect(model.steps[0].displayTitle).toBe("cat …/polish.md");
     expect(model.steps[0].detailTitle)
       .toBe("Shell · cat /Users/bytedance/.agents/skills/impeccable/reference/polish.md");
     expect(model.steps[0].detail).toBe(command);

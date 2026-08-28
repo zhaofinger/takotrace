@@ -41,6 +41,8 @@ describe("DetailPanel polish", () => {
 
     expect(markup).toContain('class="vbg-custom-turn-summary"');
     expect(markup).toContain('class="vbg-custom-turn-overview"');
+    expect(markup).toContain('class="vbg-custom-turn-summary__utilities"');
+    expect(markup).toContain('class="vbg-custom-turn-overview vbg-custom-turn-overview--utilities"');
     expect(markup).toContain('<dt>Status</dt>');
     expect(markup).toContain('<dt>Started</dt>');
     expect(markup).toContain('<dt>Duration</dt>');
@@ -49,7 +51,9 @@ describe("DetailPanel polish", () => {
     expect(markup).not.toContain('<dt>Ended</dt>');
     expect(markup).not.toContain('<dt>Thread</dt>');
     expect(markup).toContain('title="turn-full-id"');
-    expect(markup).toContain('<code>turn-ful…</code>');
+    expect(markup).toContain('<code aria-label="Run turn-full-id" title="turn-full-id">turn-ful…</code>');
+    expect(markup).toContain('aria-label="Copy run ID"');
+    expect(markup).toContain('class="vbg-custom-id-copy"');
     expect(markup).not.toContain('<details');
     expect(markup).not.toContain('vbg-custom-turn-meta-line');
   });

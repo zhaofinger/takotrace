@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { ThreadScopeServer, type RpcActions } from '../../src/server/http-server.js';
@@ -314,6 +314,115 @@ describe('ThreadScopeServer', () => {
     expect(outsideResponse.status).toBe(200);
     expect(await outsideResponse.text()).toContain('# Private');
     expect((await fetch(`${base}not-hex`)).status).toBe(400);
+  });
+
+  it('opens supported local files through a loopback same-origin host action', async () => {
+    const actions: RpcActions = {
+      startThread: async () => ({}),
+      resumeThread: async () => ({}),
+      startTurn: async () => ({}),
+    };
+    const root = await mkdtemp(join(tmpdir(), 'thread-scope-open-path-'));
+    temporaryPaths.push(root);
+    const artifact = join(root, 'artifact.html');
+    await writeFile(artifact, '<!doctype html><title>Artifact</title>');
+    const unsupported = join(root, 'artifact.bin');
+    await writeFile(unsupported, 'binary');
+    const openPath = vi.fn(async () => {});
+    const server = new ThreadScopeServer(actions, { port: 0, openPath });
+    servers.push(server);
+    const { host, port } = await server.listen();
+    const base = `http://${host}:${port}`;
+    const endpoint = `${base}/api/host.openPath`;
+    const headers = { 'content-type': 'application/json', origin: base };
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ path: `${artifact}:42:3` }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ opened: true });
+    expect(openPath).toHaveBeenCalledWith(await realpath(artifact));
+
+    const invalidCases = [
+      { path: '', status: 400 },
+      { path: 'relative.html', status: 400 },
+      { path: join(root, 'missing.html'), status: 404 },
+      { path: root, status: 403 },
+      { path: unsupported, status: 415 },
+    ];
+    for (const invalid of invalidCases) {
+      const invalidResponse = await fetch(endpoint, {
+        method: 'POST', headers, body: JSON.stringify({ path: invalid.path }),
+      });
+      expect(invalidResponse.status, invalid.path).toBe(invalid.status);
+    }
+    expect(openPath).toHaveBeenCalledTimes(1);
+    expect((await fetch(endpoint)).status).toBe(405);
+  });
+
+  it('rejects non-local or cross-origin host-open requests', async () => {
+    const actions: RpcActions = {
+      startThread: async () => ({}),
+      resumeThread: async () => ({}),
+      startTurn: async () => ({}),
+    };
+    const root = await mkdtemp(join(tmpdir(), 'thread-scope-open-path-origin-'));
+    temporaryPaths.push(root);
+    const artifact = join(root, 'artifact.html');
+    await writeFile(artifact, '<!doctype html>');
+    const openPath = vi.fn(async () => {});
+    const server = new ThreadScopeServer(actions, { port: 0, openPath });
+    servers.push(server);
+    const { host, port } = await server.listen();
+    const endpoint = `http://${host}:${port}/api/host.openPath`;
+    const body = JSON.stringify({ path: artifact });
+
+    const missingOrigin = await fetch(endpoint, { method: 'POST', body });
+    const wrongOrigin = await fetch(endpoint, {
+      method: 'POST', headers: { origin: 'http://127.0.0.1:1' }, body,
+    });
+    const crossSite = await fetch(endpoint, {
+      method: 'POST',
+      headers: { origin: `http://${host}:${port}`, 'sec-fetch-site': 'cross-site' },
+      body,
+    });
+    const reboundHost = await fetch(endpoint, {
+      method: 'POST',
+      headers: { host: 'attacker.example', origin: 'http://attacker.example' },
+      body,
+    });
+
+    expect([missingOrigin.status, wrongOrigin.status, crossSite.status, reboundHost.status]).toEqual([403, 403, 403, 403]);
+    expect(openPath).not.toHaveBeenCalled();
+  });
+
+  it('returns a gateway error when the native file opener fails', async () => {
+    const actions: RpcActions = {
+      startThread: async () => ({}),
+      resumeThread: async () => ({}),
+      startTurn: async () => ({}),
+    };
+    const root = await mkdtemp(join(tmpdir(), 'thread-scope-open-path-error-'));
+    temporaryPaths.push(root);
+    const artifact = join(root, 'artifact.html');
+    await writeFile(artifact, '<!doctype html>');
+    const server = new ThreadScopeServer(actions, {
+      port: 0,
+      openPath: async () => { throw new Error('native opener failed'); },
+    });
+    servers.push(server);
+    const { host, port } = await server.listen();
+    const base = `http://${host}:${port}`;
+    const response = await fetch(`${base}/api/host.openPath`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: base },
+      body: JSON.stringify({ path: artifact }),
+    });
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: { message: 'native opener failed' } });
   });
 });
 

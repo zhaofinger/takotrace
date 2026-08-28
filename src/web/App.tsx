@@ -28,8 +28,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [syncingThreads, setSyncingThreads] = useState<Set<string>>(() => new Set());
+  const [syncRetryNonce, setSyncRetryNonce] = useState(0);
   const refreshTimer = useRef<number | undefined>(undefined);
   const syncingThreadIds = useRef(new Set<string>());
+  const failedSyncThreadIds = useRef(new Set<string>());
   const turnDetailRequestToken = useRef(0);
 
   useEffect(() => {
@@ -98,6 +100,7 @@ export default function App() {
     if (
       !selectedThreadId ||
       syncingThreadIds.current.has(selectedThreadId) ||
+      failedSyncThreadIds.current.has(selectedThreadId) ||
       state.threads.find((thread) => thread.id === selectedThreadId)?.turnsLoaded !== false
     ) {
       return;
@@ -106,10 +109,13 @@ export default function App() {
     syncingThreadIds.current.add(selectedThreadId);
     setSyncingThreads((current) => new Set(current).add(selectedThreadId));
     void syncThread(selectedThreadId)
-      .then(() => loadState())
+      .then(() => {
+        failedSyncThreadIds.current.delete(selectedThreadId);
+        return loadState();
+      })
       .catch((error: unknown) => {
-        // Fallback: reload state in case partial metadata was recorded, and report error non-fatally
-        void loadState();
+        failedSyncThreadIds.current.add(selectedThreadId);
+        // Stop automatic retries until the user explicitly retries from the error banner.
         setLoadError(error instanceof Error ? error.message : "Unable to sync thread");
       })
       .finally(() => {
@@ -120,7 +126,16 @@ export default function App() {
           return next;
         });
       });
-  }, [loadState, selectedThreadId, state.threads]);
+  }, [loadState, selectedThreadId, state.threads, syncRetryNonce]);
+
+  const retryLoad = () => {
+    if (selectedThreadId && failedSyncThreadIds.current.delete(selectedThreadId)) {
+      setLoadError(undefined);
+      setSyncRetryNonce((current) => current + 1);
+      return;
+    }
+    void loadState();
+  };
 
   const selectedThread = state.threads.find((thread) => thread.id === selectedThreadId);
   const threadLoading = selectedThreadId ? syncingThreads.has(selectedThreadId) : false;
@@ -190,13 +205,13 @@ export default function App() {
       {loadError && (
         <div className="vbg-custom-error-banner" role="alert">
           <span>{loadError}</span>
-          <button onClick={() => void loadState()} type="button">Retry</button>
+          <button onClick={retryLoad} type="button">Retry</button>
         </div>
       )}
       <div aria-busy={loading} className={`vbg-custom-workspace${loading ? " vbg-custom-is-loading" : ""}`}>
-        <ThreadSidebar threads={state.threads} selectedId={selectedThreadId} onSelect={setSelectedThreadId} />
+        <ThreadSidebar isLoading={loading} threads={state.threads} selectedId={selectedThreadId} onSelect={setSelectedThreadId} />
         <Timeline
-          isLoading={threadLoading}
+          isLoading={loading || threadLoading}
           thread={selectedThread}
           turns={turns}
           selectedId={selectedTurnId}
@@ -204,7 +219,7 @@ export default function App() {
         />
         <DetailPanel
           error={turnDetailError}
-          isLoading={threadLoading || turnDetailLoading}
+          isLoading={loading || threadLoading || turnDetailLoading}
           turn={visibleTurn}
         />
       </div>

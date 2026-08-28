@@ -79,6 +79,21 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).toContain('title="Bar width represents relative duration"');
   });
 
+  it("keeps Skill and MCP inside Tools while preserving Subagents as a separate overview lane", () => {
+    const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
+      items: [
+        event(1, "skillCall", { name: "impeccable" }),
+        event(2, "mcpToolCall", { server: "browser", tool: "open" }),
+        event(3, "subAgentActivity", { kind: "started", agent_path: "/root/reviewer" }),
+      ],
+    }));
+
+    expect(markup).toContain("<span>Tools</span>");
+    expect(markup).toContain("<span>Subagents</span>");
+    expect(markup).not.toContain("<span>Skills</span>");
+    expect(markup).not.toContain("<span>MCP</span>");
+  });
+
   it("falls back to sequence when snapshot timestamps contradict execution order", () => {
     const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
       items: [

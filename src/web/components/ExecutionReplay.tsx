@@ -403,7 +403,7 @@ export function ReplayActionInspector({
             aria-label="Close action details"
             title="Close details"
           >
-            &times;
+            <Icon name="close" />
           </button>
         </div>
       </header>

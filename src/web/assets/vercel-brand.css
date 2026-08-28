@@ -81,7 +81,7 @@
   --vbg-color-info: var(--vbg-blue-700);
   --vbg-color-success: var(--vbg-green-900);
   --vbg-color-warning: var(--vbg-amber-900);
-  --vbg-color-error: var(--vbg-red-700);
+  --vbg-color-error: var(--vbg-red-900);
   --vbg-focus: light-dark(var(--vbg-blue-700), var(--vbg-blue-900));
   --vbg-space-1: 4px;
   --vbg-space-2: 8px;
@@ -236,7 +236,7 @@
   margin-block-end: var(--vbg-space-4);
   font-size: var(--vbg-type-page-title);
   line-height: var(--vbg-leading-page-title);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.04em;
 }
 
 :where(.vbg-report) .vbg-title {
@@ -244,14 +244,14 @@
   margin-block-end: var(--vbg-space-4);
   font-size: var(--vbg-type-page-title);
   line-height: var(--vbg-leading-page-title);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.04em;
 }
 
 :where(.vbg-report) .vbg-display {
   max-width: var(--vbg-display-measure);
   font-size: var(--vbg-type-display);
   line-height: var(--vbg-leading-display);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.04em;
 }
 
 :where(.vbg-report) h2,

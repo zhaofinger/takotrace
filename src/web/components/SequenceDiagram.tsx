@@ -144,7 +144,7 @@ export function SequenceStepInspector({
             aria-label="Close step details"
             title="Close details"
           >
-            &times;
+            <Icon name="close" />
           </button>
         </div>
       </header>
@@ -331,7 +331,7 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
             onClick={handleCopyMermaid}
             title={copyState === "copied" ? "Mermaid copied" : copyState === "error" ? "Copy failed" : "Copy Mermaid sequence syntax"}
           >
-            <Icon name={copyState === "copied" ? "check" : copyState === "error" ? "alert" : "code"} />
+            <Icon name={copyState === "copied" ? "check" : copyState === "error" ? "alert" : "copy"} />
             <span aria-live="polite" className="vbg-custom-sr-only">
               {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy Mermaid"}
             </span>
@@ -422,7 +422,7 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
                         aria-expanded={isSelected}
                         aria-controls={isSelected ? "sequence-step-inspector" : undefined}
                         aria-describedby={stepTooltip?.stepId === step.id ? "sequence-step-tooltip" : undefined}
-                        aria-label={`Step ${step.seq}: ${step.label} - ${step.displayTitle}, ${step.from} to ${step.toLabel ?? step.to}${parallelGroup ? `, ${parallelGroup.label}` : ""}`}
+                        aria-label={`Step ${step.seq}: ${step.label} - ${step.detailTitle}, ${step.from} to ${step.toLabel ?? step.to}${parallelGroup ? `, ${parallelGroup.label}` : ""}`}
                         onBlur={() => setStepTooltip(null)}
                         onFocus={(event) => {
                           if (!event.currentTarget.matches(":focus-visible")) return;
@@ -445,6 +445,11 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
                               <span aria-hidden="true" className="vbg-custom-sequence__self-path" />
                               <span className="vbg-custom-sequence__self-badge">
                                 <span className="vbg-custom-sequence__step-num">{step.seq}</span>
+                                {step.displayIcon && (
+                                  <span aria-hidden="true" className="vbg-custom-sequence__step-icon">
+                                    <Icon name={step.displayIcon} />
+                                  </span>
+                                )}
                                 <strong
                                   className={`vbg-custom-sequence__step-title${step.isCommand ? " vbg-custom-sequence__step-title--command" : ""}`}
                                   data-tooltip={step.detailTitle}
@@ -470,6 +475,11 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
                               <div className="vbg-custom-sequence__arrow-head" />
                               <div className="vbg-custom-sequence__arrow-label">
                                 <span className="vbg-custom-sequence__step-num">{step.seq}</span>
+                                {step.displayIcon && (
+                                  <span aria-hidden="true" className="vbg-custom-sequence__step-icon">
+                                    <Icon name={step.displayIcon} />
+                                  </span>
+                                )}
                                 <strong
                                   className={`vbg-custom-sequence__step-title${step.isCommand ? " vbg-custom-sequence__step-title--command" : ""}`}
                                   data-tooltip={step.detailTitle}

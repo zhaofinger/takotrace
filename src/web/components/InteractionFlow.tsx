@@ -10,13 +10,11 @@ import { StatusMark } from "./StatusMark";
 
 export type FlowEvent = CompactTraceEvent | TraceEvent;
 export type FlowKind = "user" | "agent" | "reasoning" | "skill" | "mcp" | "tool" | "subagent" | "file" | "web" | "system";
-type FlowLane = "user" | "agent" | "skill" | "mcp" | "tool" | "subagent";
+type FlowLane = "user" | "agent" | "tool" | "subagent";
 
 const FLOW_LANES: Array<{ key: FlowLane; label: string }> = [
-  { key: "user", label: "User" },
+  { key: "user", label: "Input" },
   { key: "agent", label: "Agent" },
-  { key: "skill", label: "Skills" },
-  { key: "mcp", label: "MCP" },
   { key: "tool", label: "Tools" },
   { key: "subagent", label: "Subagents" },
 ];
@@ -278,18 +276,18 @@ export function mergeFlowEvents(items: FlowEvent[]): FlowEvent[] {
 export function flowKindIconName(kind: FlowKind): IconName {
   if (kind === "user") return "user";
   if (kind === "agent" || kind === "reasoning") return "agent";
-  if (kind === "mcp") return "network";
+  if (kind === "mcp") return "mcp";
   if (kind === "subagent") return "subagent";
-  if (kind === "skill" || kind === "file") return "code";
-  if (kind === "web") return "search";
-  return "terminal";
+  if (kind === "skill") return "skill";
+  if (kind === "file") return "file";
+  if (kind === "web") return "web";
+  if (kind === "tool") return "tool";
+  return "activity";
 }
 
 export function flowLane(kind: FlowKind): FlowLane {
   if (kind === "user") return "user";
   if (kind === "agent" || kind === "reasoning") return "agent";
-  if (kind === "skill") return "skill";
-  if (kind === "mcp") return "mcp";
   if (kind === "subagent") return "subagent";
   return "tool";
 }

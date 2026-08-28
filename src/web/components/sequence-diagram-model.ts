@@ -2,10 +2,11 @@ import type { TraceStatus } from "../types";
 import { flowKindIconName, flowNode, mergeFlowEvents } from "./InteractionFlow";
 import type { FlowEvent, FlowKind, FlowNode } from "./InteractionFlow";
 import type { IconName } from "./Icon";
+import { nodeReplExecution } from "./mcp-execution";
 import { parallelEvidenceLabel, parallelEventId, parallelExecutionGroups } from "./parallel-execution-model";
 import type { ParallelEvidence } from "./parallel-execution-model";
 
-export type SequenceParticipant = "user" | "agent" | "skill" | "tool" | "mcp" | "subagent";
+export type SequenceParticipant = "user" | "agent" | "tool" | "mcp" | "subagent";
 export type SequenceStepType = "call" | "return" | "self" | "note";
 
 export interface ParticipantInfo {
@@ -18,7 +19,6 @@ export interface ParticipantInfo {
 export const SEQUENCE_PARTICIPANTS: Record<SequenceParticipant, ParticipantInfo> = {
   user: { key: "user", label: "User", subtext: "Prompt / Feedback", iconName: flowKindIconName("user") },
   agent: { key: "agent", label: "Agent", subtext: "Orchestrator", iconName: flowKindIconName("agent") },
-  skill: { key: "skill", label: "Skills", subtext: "Loaded Guidance", iconName: flowKindIconName("skill") },
   tool: { key: "tool", label: "Tools", subtext: "Shell / Files", iconName: flowKindIconName("tool") },
   mcp: { key: "mcp", label: "MCP", subtext: "Protocol Tools", iconName: flowKindIconName("mcp") },
   subagent: { key: "subagent", label: "Subagent", subtext: "Collaborators", iconName: flowKindIconName("subagent") },
@@ -33,8 +33,10 @@ export interface SequenceStep {
   type: SequenceStepType;
   label: string;
   title: string;
+  displayIcon?: IconName;
   displayTitle: string;
   detailTitle: string;
+  exportTitle: string;
   isCommand: boolean;
   detail: string;
   meta?: string;
@@ -80,7 +82,6 @@ function eventId(event: FlowEvent): string {
 function participantFromKind(kind: FlowKind): SequenceParticipant {
   if (kind === "user") return "user";
   if (kind === "agent" || kind === "reasoning") return "agent";
-  if (kind === "skill") return "skill";
   if (kind === "mcp") return "mcp";
   if (kind === "subagent") return "subagent";
   return "tool";
@@ -139,12 +140,46 @@ function isCommandExecution(event: FlowEvent): boolean {
     || event.method.toLowerCase().includes("commandexecution");
 }
 
-function stepDisplay(node: FlowNode, event: FlowEvent): Pick<SequenceStep, "displayTitle" | "detailTitle" | "isCommand"> {
+function eventPayload(event: FlowEvent): unknown {
+  if (!("raw" in event) || !event.raw || typeof event.raw !== "object" || Array.isArray(event.raw)) return undefined;
+  const raw = event.raw as Record<string, unknown>;
+  const params = raw.params && typeof raw.params === "object" && !Array.isArray(raw.params)
+    ? raw.params as Record<string, unknown>
+    : undefined;
+  const item = params?.item && typeof params.item === "object" && !Array.isArray(params.item)
+    ? params.item as Record<string, unknown>
+    : undefined;
+  return item && Object.keys(item).length ? item : raw;
+}
+
+function compactSkillTitle(title: string): string {
+  return title
+    .replace(/^Skill(?: load)? · /, "")
+    .replace(/ \(inferred\)$/, "");
+}
+
+function stepDisplay(
+  node: FlowNode,
+  event: FlowEvent,
+): Pick<SequenceStep, "displayIcon" | "displayTitle" | "detailTitle" | "exportTitle" | "isCommand"> {
   const isCommand = node.kind === "tool" && isCommandExecution(event);
+  const isSkill = node.kind === "skill";
+  const nodeRepl = node.kind === "mcp" ? nodeReplExecution(eventPayload(event)) : undefined;
+  const nodeReplIcon: IconName | undefined = nodeRepl?.kind === "browser"
+    ? "web"
+    : nodeRepl?.kind === "computer-use"
+      ? "monitor"
+      : nodeRepl?.kind === "javascript"
+        ? "braces"
+        : undefined;
   const cwd = node.meta?.split(" · ", 1)[0];
+  const compactCommand = isCommand ? compactShellCommand(node.detail, cwd) : undefined;
+  const detailCommand = isCommand ? normalizeShellCommand(node.detail) : undefined;
   return {
-    displayTitle: isCommand ? `Shell · ${compactShellCommand(node.detail, cwd)}` : node.title,
-    detailTitle: isCommand ? `Shell · ${normalizeShellCommand(node.detail)}` : node.title,
+    displayIcon: isCommand ? "terminal" : isSkill ? "skill" : nodeReplIcon,
+    displayTitle: compactCommand ?? (isSkill ? compactSkillTitle(node.title) : nodeRepl?.title ?? node.title),
+    detailTitle: detailCommand ? `Shell · ${detailCommand}` : node.title,
+    exportTitle: compactCommand ? `Shell · ${compactCommand}` : node.title,
     isCommand,
   };
 }
@@ -214,19 +249,18 @@ export function buildSequenceDiagramModel(
         node,
         isKey: true,
       });
-    } else if (node.kind === "reasoning") {
+    } else if (node.kind === "reasoning" || node.kind === "skill") {
       activeParticipants.add("agent");
+      const isSkill = node.kind === "skill";
       steps.push({
         id: `seq-${eventId(event)}`,
         seq: stepSeq++,
         from: "agent",
         to: "agent",
         type: "self",
-        label: "Think & Plan",
-        title: "Reasoning",
-        displayTitle: "Reasoning",
-        detailTitle: "Reasoning",
-        isCommand: false,
+        label: isSkill ? "Skill load" : "Think & Plan",
+        title: node.title,
+        ...stepDisplay(node, event),
         detail: node.detail,
         meta: node.meta,
         status: event.status,
@@ -234,7 +268,7 @@ export function buildSequenceDiagramModel(
         at: event.at,
         event,
         node,
-        isKey: false,
+        isKey: isSkill,
       });
     } else {
       const targetParticipant = participantFromKind(node.kind);
@@ -301,8 +335,8 @@ export function buildSequenceDiagramModel(
     });
   }
 
-  // 保证基本参与者顺序: User -> Agent -> Skills -> Tools -> MCP -> Subagent
-  const participantOrder: SequenceParticipant[] = ["user", "agent", "skill", "tool", "mcp", "subagent"];
+  // 保证基本参与者顺序: User -> Agent -> Tools -> MCP -> Subagent
+  const participantOrder: SequenceParticipant[] = ["user", "agent", "tool", "mcp", "subagent"];
   const participants = participantOrder
     .filter((key) => activeParticipants.has(key))
     .map((key) => SEQUENCE_PARTICIPANTS[key]);
@@ -361,8 +395,8 @@ export function exportMermaidSequence(model: SequenceDiagramModel): string {
     const startingGroup = parallelStart.get(index);
     const membership = parallelMember.get(step.id);
     if (startingGroup) lines.push(`  par ${sanitizeMermaidText(startingGroup.label)}`);
-    else if (membership && membership.index > 0) lines.push(`  and ${sanitizeMermaidText(step.displayTitle)}`);
-    const title = sanitizeMermaidText(step.displayTitle || step.label);
+    else if (membership && membership.index > 0) lines.push(`  and ${sanitizeMermaidText(step.exportTitle)}`);
+    const title = sanitizeMermaidText(step.exportTitle || step.label);
     const duration = step.durationMs !== undefined ? ` (${step.durationMs}ms)` : "";
     const msg = `${title}${duration}`;
 

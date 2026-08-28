@@ -114,13 +114,13 @@ export function Timeline({
       <header className="vbg-custom-timeline__header">
         <div className="vbg-custom-timeline__title">
           {thread ? (
-            <div className="vbg-custom-thread-identity" title={thread.id}>
-              <span>Session ID</span>
-              <code>{thread.id}</code>
+            <div className="vbg-custom-thread-identity">
+              <span>Session</span>
+              <code title={thread.id}>{thread.id}</code>
               <button
                 aria-label={copied ? "Session ID copied" : "Copy session ID"}
                 aria-live="polite"
-                className={`vbg-custom-thread-copy${copied ? " vbg-custom-is-copied" : ""}`}
+                className={`vbg-custom-id-copy${copied ? " vbg-custom-is-copied" : ""}`}
                 onClick={() => void copyThreadId()}
                 title={copied ? "Copied" : "Copy session ID"}
                 type="button"
@@ -129,33 +129,38 @@ export function Timeline({
               </button>
             </div>
           ) : <span className="vbg-custom-timeline__placeholder">Select a session</span>}
-          {thread && (
-            <span className="vbg-custom-count vbg-custom-count--muted">
-              {isLoading ? "Loading…" : `${turns.length} runs`}
-            </span>
-          )}
         </div>
-        {thread?.tokenUsage && (
-          <dl aria-label="Session token usage" className="vbg-custom-thread-token-summary">
+        {thread && (
+          <dl aria-label="Session summary" className="vbg-custom-thread-meta">
             <div>
-              <dt>Total tokens</dt>
-              <dd
-                aria-label={`${exactTokenFormatter.format(thread.tokenUsage.total.totalTokens)} total tokens`}
-                title={`${exactTokenFormatter.format(thread.tokenUsage.total.totalTokens)} tokens`}
-              >
-                {formatTokenCount(thread.tokenUsage.total.totalTokens)}
+              <dt>Runs</dt>
+              <dd aria-label={isLoading ? "Loading runs" : `${turns.length} ${turns.length === 1 ? "run" : "runs"}`}>
+                {isLoading ? "…" : turns.length}
               </dd>
             </div>
-            {contextPercentage && contextWindow !== undefined && contextTokens !== undefined && (
-              <div>
-                <dt>Context</dt>
-                <dd
-                  aria-label={`${exactTokenFormatter.format(contextTokens)} of ${exactTokenFormatter.format(contextWindow)} context tokens, ${contextPercentage}`}
-                  title={`${exactTokenFormatter.format(contextTokens)} / ${exactTokenFormatter.format(contextWindow)} tokens (${contextPercentage})`}
-                >
-                  <strong>{contextPercentage}</strong>
-                </dd>
-              </div>
+            {thread.tokenUsage && (
+              <>
+                <div>
+                  <dt>Tokens</dt>
+                  <dd
+                    aria-label={`${exactTokenFormatter.format(thread.tokenUsage.total.totalTokens)} total tokens`}
+                    title={`${exactTokenFormatter.format(thread.tokenUsage.total.totalTokens)} tokens`}
+                  >
+                    {formatTokenCount(thread.tokenUsage.total.totalTokens)}
+                  </dd>
+                </div>
+                {contextPercentage && contextWindow !== undefined && contextTokens !== undefined && (
+                  <div>
+                    <dt>Context</dt>
+                    <dd
+                      aria-label={`${exactTokenFormatter.format(contextTokens)} of ${exactTokenFormatter.format(contextWindow)} context tokens, ${contextPercentage}`}
+                      title={`${exactTokenFormatter.format(contextTokens)} / ${exactTokenFormatter.format(contextWindow)} tokens (${contextPercentage})`}
+                    >
+                      {contextPercentage}
+                    </dd>
+                  </div>
+                )}
+              </>
             )}
           </dl>
         )}
@@ -199,7 +204,7 @@ export function Timeline({
             <tr>
               <td>
                 <div className="vbg-custom-timeline-empty">
-                  <Icon name="activity" />
+                  <Icon name="history" />
                   <strong>{thread ? "No runs in this session" : "No session selected"}</strong>
                   <span>{thread ? "Synced runs will appear here." : "Choose a session from the list."}</span>
                 </div>
@@ -211,7 +216,9 @@ export function Timeline({
       <footer className="vbg-custom-timeline__footer">
         {isLoading
           ? "Loading session history…"
-          : `Showing ${turns.length} run${turns.length === 1 ? "" : "s"} · ${thread?.historySource === "rollout-file" ? "Rollout fallback" : "App Server"}`}
+          : thread
+            ? `Showing ${turns.length} run${turns.length === 1 ? "" : "s"} · ${thread.historySource === "rollout-file" ? "Rollout fallback" : "App Server"}`
+            : "Select a session to view runs"}
       </footer>
     </main>
   );

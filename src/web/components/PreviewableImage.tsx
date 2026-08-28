@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Icon } from "./Icon";
 
 export function PreviewableImage({ alt, src }: { alt: string; src?: string }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -66,7 +67,7 @@ export function PreviewableImage({ alt, src }: { alt: string; src?: string }) {
               title="Close"
               type="button"
             >
-              <span aria-hidden="true">×</span>
+              <Icon name="close" />
             </button>
           </div>
         </div>,

@@ -1,10 +1,14 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { CompactTurn, Turn } from "../types";
 import ExecutionReplay from "./ExecutionReplay";
 import { HighlightedCode } from "./HighlightedCode";
 import { Icon } from "./Icon";
-import { SequenceDiagram } from "./SequenceDiagram";
 import { StatusMark } from "./StatusMark";
+
+const SequenceDiagram = lazy(async () => {
+  const module = await import("./SequenceDiagram");
+  return { default: module.SequenceDiagram };
+});
 
 const compactTokenFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
@@ -53,7 +57,11 @@ export function DetailPanel({
   turn?: CompactTurn | Turn;
 }) {
   const [tab, setTab] = useState<"trace" | "sequence" | "json">("trace");
+  const [copiedRunId, setCopiedRunId] = useState<string>();
+  const copyResetTimer = useRef<number | undefined>(undefined);
   const raw = useMemo(() => turn ? JSON.stringify(turn, null, 2) : "", [turn]);
+  const panelId = tab === "trace" ? "turn-trace-panel" : tab === "sequence" ? "turn-sequence-panel" : "turn-json-panel";
+  const panelLabelId = tab === "trace" ? "turn-trace-tab" : tab === "sequence" ? "turn-sequence-tab" : "turn-json-tab";
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []);
@@ -66,6 +74,25 @@ export function DetailPanel({
     event.preventDefault();
     tabs[nextIndex]?.focus();
     tabs[nextIndex]?.click();
+  };
+
+  useEffect(() => {
+    setCopiedRunId(undefined);
+    window.clearTimeout(copyResetTimer.current);
+  }, [turn?.id]);
+
+  useEffect(() => () => window.clearTimeout(copyResetTimer.current), []);
+
+  const copyRunId = async () => {
+    if (!turn) return;
+    try {
+      await navigator.clipboard.writeText(turn.id);
+      setCopiedRunId(turn.id);
+      window.clearTimeout(copyResetTimer.current);
+      copyResetTimer.current = window.setTimeout(() => setCopiedRunId(undefined), 1_500);
+    } catch {
+      setCopiedRunId(undefined);
+    }
   };
 
   return (
@@ -111,25 +138,14 @@ export function DetailPanel({
           Raw JSON
         </button>
       </div>
-      {tab === "json" ? (
-        <HighlightedCode
-          aria-labelledby="turn-json-tab"
-          className="vbg-custom-raw-json"
-          code={raw}
-          id="turn-json-panel"
-          language="json"
-          role="tabpanel"
-          tabIndex={0}
-        />
-      ) : (
-        <div
-          aria-busy={isLoading}
-          aria-labelledby={tab === "trace" ? "turn-trace-tab" : "turn-sequence-tab"}
-          className="vbg-custom-detail__content"
-          id={tab === "trace" ? "turn-trace-panel" : "turn-sequence-panel"}
-          role="tabpanel"
-          tabIndex={0}
-        >
+      <div
+        aria-busy={isLoading}
+        aria-labelledby={panelLabelId}
+        className={`vbg-custom-detail__content${tab === "json" ? " vbg-custom-detail__content--raw" : ""}`}
+        id={panelId}
+        role="tabpanel"
+        tabIndex={0}
+      >
           {error && (
             <p aria-live="polite" className="vbg-custom-detail-state vbg-custom-detail-state--error">{error}</p>
           )}
@@ -144,6 +160,12 @@ export function DetailPanel({
             </div>
           ) : (
             <div className="vbg-custom-detail-empty"><strong>No run selected</strong><span>Select a run to inspect all of its steps.</span></div>
+          ) : tab === "json" ? (
+            <HighlightedCode
+              className="vbg-custom-raw-json"
+              code={raw}
+              language="json"
+            />
           ) : (
             <>
               <div className="vbg-custom-turn-summary">
@@ -152,48 +174,67 @@ export function DetailPanel({
                   <div><dt>Started</dt><dd>{formatDate(turn.startedAt)}</dd></div>
                   <div><dt>Duration</dt><dd title={turn.durationMs === undefined ? undefined : `${turn.durationMs}ms`}>{formatDuration(turn.durationMs)}</dd></div>
                   <div><dt>Steps</dt><dd>{"itemCount" in turn ? turn.itemCount : turn.items.length}</dd></div>
-                  <div className="vbg-custom-turn-overview__identity">
-                    <dt>Run</dt>
-                    <dd aria-label={`Run ${turn.id}`} title={turn.id}><code>{formatShortId(turn.id)}</code></dd>
-                  </div>
                 </dl>
-                {turn.tokenUsage && (
-                  <section aria-labelledby="turn-token-usage-heading" className="vbg-custom-turn-token-usage">
-                    <details>
-                      <summary>
-                        <span aria-hidden="true" className="vbg-custom-turn-token-usage__disclosure"><Icon name="chevron" /></span>
-                        <span id="turn-token-usage-heading">Token usage</span>
-                        <strong
-                          aria-label={`${exactTokenFormatter.format(turn.tokenUsage.totalTokens)} total tokens`}
-                          title={`${exactTokenFormatter.format(turn.tokenUsage.totalTokens)} tokens`}
+                <div className="vbg-custom-turn-summary__utilities">
+                  <dl className="vbg-custom-turn-overview vbg-custom-turn-overview--utilities">
+                    <div className="vbg-custom-turn-overview__identity">
+                      <dt>Run</dt>
+                      <dd>
+                        <code aria-label={`Run ${turn.id}`} title={turn.id}>{formatShortId(turn.id)}</code>
+                        <button
+                          aria-label={copiedRunId === turn.id ? "Run ID copied" : "Copy run ID"}
+                          aria-live="polite"
+                          className={`vbg-custom-id-copy${copiedRunId === turn.id ? " vbg-custom-is-copied" : ""}`}
+                          onClick={() => void copyRunId()}
+                          title={copiedRunId === turn.id ? "Copied" : "Copy run ID"}
+                          type="button"
                         >
-                          {formatTokenCount(turn.tokenUsage.totalTokens)}
-                        </strong>
-                      </summary>
-                      <dl>
-                        {tokenDetailMetrics.map(({ key, label, hideWhenZero }) => {
-                          const value = turn.tokenUsage?.[key] ?? 0;
-                          if (hideWhenZero && value === 0) return null;
-                          const exactValue = exactTokenFormatter.format(value);
-                          return (
-                            <div key={key}>
-                              <dt>{label}</dt>
-                              <dd aria-label={`${exactValue} ${label.toLowerCase()} tokens`} title={`${exactValue} tokens`}>
-                                {formatTokenCount(value)}
-                              </dd>
-                            </div>
-                          );
-                        })}
-                      </dl>
-                    </details>
-                  </section>
-                )}
+                          <Icon name={copiedRunId === turn.id ? "check" : "copy"} />
+                        </button>
+                      </dd>
+                    </div>
+                  </dl>
+                  {turn.tokenUsage && (
+                    <section aria-labelledby="turn-token-usage-heading" className="vbg-custom-turn-token-usage">
+                      <details>
+                        <summary>
+                          <span aria-hidden="true" className="vbg-custom-turn-token-usage__disclosure"><Icon name="chevron" /></span>
+                          <span id="turn-token-usage-heading">Token usage</span>
+                          <strong
+                            aria-label={`${exactTokenFormatter.format(turn.tokenUsage.totalTokens)} total tokens`}
+                            title={`${exactTokenFormatter.format(turn.tokenUsage.totalTokens)} tokens`}
+                          >
+                            {formatTokenCount(turn.tokenUsage.totalTokens)}
+                          </strong>
+                        </summary>
+                        <dl>
+                          {tokenDetailMetrics.map(({ key, label, hideWhenZero }) => {
+                            const value = turn.tokenUsage?.[key] ?? 0;
+                            if (hideWhenZero && value === 0) return null;
+                            const exactValue = exactTokenFormatter.format(value);
+                            return (
+                              <div key={key}>
+                                <dt>{label}</dt>
+                                <dd aria-label={`${exactValue} ${label.toLowerCase()} tokens`} title={`${exactValue} tokens`}>
+                                  {formatTokenCount(value)}
+                                </dd>
+                              </div>
+                            );
+                          })}
+                        </dl>
+                      </details>
+                    </section>
+                  )}
+                </div>
               </div>
-              {tab === "trace" ? <ExecutionReplay items={turn.items} /> : <SequenceDiagram items={turn.items} />}
+              {tab === "trace" ? <ExecutionReplay items={turn.items} /> : (
+                <Suspense fallback={<div aria-live="polite" className="vbg-custom-loading-state" role="status">Loading sequence…</div>}>
+                  <SequenceDiagram items={turn.items} />
+                </Suspense>
+              )}
             </>
           )}
-        </div>
-      )}
+      </div>
     </aside>
   );
 }

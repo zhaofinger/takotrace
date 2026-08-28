@@ -34,7 +34,7 @@ describe('ThreadSidebar', () => {
     expect(markup).not.toContain('vbg-custom-thread-row__turns');
     expect(markup).toContain('role="switch"');
     expect(markup).toContain('aria-checked="false"');
-    expect(markup).toContain('Sort by time');
+    expect(markup).toContain('Group by time');
     expect(markup).not.toContain('Filter threads');
     expect(markup).not.toContain('type="search"');
   });
@@ -53,5 +53,19 @@ describe('ThreadSidebar', () => {
     expect(groups.map((group) => group.label)).toEqual(['Today', 'Yesterday', 'Older']);
     expect(groups[0]?.threads.map((thread) => thread.id)).toEqual(['today-late', 'today-early']);
     expect(groups.at(-1)?.threads.map((thread) => thread.id)).toEqual(['older', 'invalid']);
+  });
+
+  it('shows an honest loading state without empty mobile controls', () => {
+    const markup = renderToStaticMarkup(createElement(ThreadSidebar, {
+      isLoading: true,
+      onSelect: () => undefined,
+      threads: [],
+    }));
+
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain('Loading sessions…');
+    expect(markup).not.toContain('No sessions yet');
+    expect(markup).not.toContain('<select');
+    expect(markup).not.toContain('Group by time');
   });
 });

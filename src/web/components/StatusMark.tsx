@@ -13,13 +13,13 @@ export function StatusMark({ status, label = true }: { status: string; label?: b
   return (
     <span className={`vbg-custom-status vbg-custom-status--${tone}`}>
       <span aria-hidden="true" className="vbg-custom-status__icon">
-        {tone === "success" ? (
-          <Icon name="check" />
-        ) : tone === "danger" ? (
-          <Icon name="alert" />
-        ) : (
-          <span className="vbg-custom-status__dot" />
-        )}
+        <Icon name={tone === "success"
+          ? "statusSuccess"
+          : tone === "danger"
+            ? "statusDanger"
+            : tone === "warning"
+              ? "statusWarning"
+              : "statusActive"} />
       </span>
       {label && <span>{status || "unknown"}</span>}
       {!label && <span className="vbg-visually-hidden">{status || "unknown"}</span>}

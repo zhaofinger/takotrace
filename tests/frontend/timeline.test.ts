@@ -104,12 +104,40 @@ describe('turnSummary', () => {
     expect(markup).toContain('title="thread-full-id"');
     expect(markup).toContain('aria-label="Copy session ID"');
     expect(markup).toContain('class="vbg-custom-thread-identity"');
-    expect(markup).toContain('<span>Session ID</span>');
-    expect(markup).toContain('class="vbg-custom-thread-copy"');
+    expect(markup).toContain('<span>Session</span>');
+    expect(markup).toContain('class="vbg-custom-id-copy"');
+    expect(markup).toContain('class="vbg-custom-thread-meta"');
     expect(markup).not.toContain('vbg-custom-thread-code');
     expect(markup).toContain('<main aria-label="Runs"');
     expect(markup).not.toContain('<h2>Runs</h2>');
     expect(markup).toContain('Rollout fallback');
+  });
+
+  it('uses the singular run label for one run', () => {
+    const thread: Thread = {
+      id: 'thread-one-run',
+      title: 'One run',
+      status: 'completed',
+      turnsLoaded: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      turns: [],
+    };
+    const markup = renderToStaticMarkup(createElement(Timeline, {
+      onSelect: () => undefined,
+      thread,
+      turns: [{
+        id: 'turn-only',
+        status: 'completed',
+        summary: 'Only run',
+        itemCount: 0,
+        items: [],
+      }],
+    }));
+
+    expect(markup).toContain('<dt>Runs</dt><dd aria-label="1 run">1</dd>');
+    expect(markup).not.toContain('1 runs');
+    expect(markup.indexOf('vbg-custom-thread-meta')).toBeGreaterThan(markup.indexOf('vbg-custom-timeline__title'));
   });
 
   it('shows total tokens and last-request context usage with exact values', () => {
@@ -147,14 +175,15 @@ describe('turnSummary', () => {
       turns: [],
     }));
 
-    expect(markup).toContain('aria-label="Session token usage"');
-    expect(markup).toContain('<dt>Total tokens</dt>');
+    expect(markup).toContain('aria-label="Session summary"');
+    expect(markup).toContain('<dt>Runs</dt><dd aria-label="0 runs">0</dd>');
+    expect(markup).toContain('<dt>Tokens</dt>');
     expect(markup).toContain('aria-label="128,500 total tokens"');
     expect(markup).toContain('title="128,500 tokens">128.5K</dd>');
     expect(markup).toContain('<dt>Context</dt>');
     expect(markup).toContain('aria-label="32,000 of 128,000 context tokens, 25%"');
     expect(markup).toContain('title="32,000 / 128,000 tokens (25%)"');
-    expect(markup).toContain('<strong>25%</strong>');
+    expect(markup).toContain('>25%</dd>');
     expect(markup).not.toContain('32K / 128K');
   });
 
@@ -174,7 +203,17 @@ describe('turnSummary', () => {
       turns: [],
     }));
 
-    expect(markup).not.toContain('aria-label="Session token usage"');
+    expect(markup).not.toContain('<dt>Tokens</dt>');
+  });
+
+  it('does not claim an App Server source before a session is selected', () => {
+    const markup = renderToStaticMarkup(createElement(Timeline, {
+      onSelect: () => undefined,
+      turns: [],
+    }));
+
+    expect(markup).toContain('Select a session to view runs');
+    expect(markup).not.toContain('Showing 0 runs · App Server');
   });
 });
 

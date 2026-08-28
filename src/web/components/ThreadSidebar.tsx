@@ -58,10 +58,12 @@ export function buildTimeGroups(threads: Thread[], now = new Date()): TimeThread
 }
 
 export function ThreadSidebar({
+  isLoading = false,
   threads,
   selectedId,
   onSelect,
 }: {
+  isLoading?: boolean;
   threads: Thread[];
   selectedId?: string;
   onSelect: (id: string) => void;
@@ -95,35 +97,55 @@ export function ThreadSidebar({
   const hasMoreTimeThreads = visibleTimeCount < threads.length;
 
   return (
-    <aside className="vbg-custom-threads" aria-label="Sessions">
-      <label className="vbg-custom-thread-select-wrap">
-        <span className="vbg-custom-sr-only">Select session</span>
-        <select value={selectedId ?? ""} onChange={(event) => onSelect(event.target.value)}>
-          {selectGroups.map((group) => (
-            <optgroup key={"cwd" in group ? group.cwd || "unknown" : group.key} label={group.label}>
-              {group.threads.map((thread) => (
-                <option key={thread.id} value={thread.id}>
-                  {thread.title || thread.id}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </label>
-      <div className="vbg-custom-thread-list-toolbar">
-        <button
-          aria-checked={sortByTime}
-          className="vbg-custom-thread-sort-switch"
-          onClick={() => setSortByTime((current) => !current)}
-          role="switch"
-          type="button"
-        >
-          <span>Sort by time</span>
-          <span aria-hidden="true" className="vbg-custom-thread-sort-switch__track">
-            <span className="vbg-custom-thread-sort-switch__thumb" />
-          </span>
-        </button>
-      </div>
+    <aside aria-busy={isLoading} className="vbg-custom-threads" aria-label="Sessions">
+      {threads.length > 0 && (
+        <label className="vbg-custom-thread-select-wrap">
+          <span className="vbg-custom-sr-only">Select session</span>
+          <select value={selectedId ?? ""} onChange={(event) => onSelect(event.target.value)}>
+            {selectGroups.map((group) => (
+              <optgroup key={"cwd" in group ? group.cwd || "unknown" : group.key} label={group.label}>
+                {group.threads.map((thread) => (
+                  <option key={thread.id} value={thread.id}>
+                    {thread.title || thread.id}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+      )}
+      {threads.length > 0 && (
+        <div className="vbg-custom-thread-list-toolbar">
+          <button
+            aria-checked={sortByTime}
+            className="vbg-custom-thread-sort-switch"
+            onClick={() => setSortByTime((current) => !current)}
+            role="switch"
+            type="button"
+          >
+            <span>Group by time</span>
+            <span aria-hidden="true" className="vbg-custom-thread-sort-switch__track">
+              <span className="vbg-custom-thread-sort-switch__thumb" />
+            </span>
+          </button>
+        </div>
+      )}
+      {threads.length === 0 && (
+        <div aria-live={isLoading ? "polite" : undefined} className="vbg-custom-thread-mobile-state" role={isLoading ? "status" : undefined}>
+          {isLoading ? (
+            <>
+              <span aria-hidden="true" className="vbg-custom-spinner" />
+              <strong>Loading sessions…</strong>
+            </>
+          ) : (
+            <>
+              <Icon name="activity" />
+              <strong>No sessions yet</strong>
+              <span>New sessions will appear here.</span>
+            </>
+          )}
+        </div>
+      )}
       <div className="vbg-custom-thread-list">
         {sortByTime ? timeGroups.map((group) => (
           <section className="vbg-custom-thread-group vbg-custom-thread-group--time" key={group.key}>
@@ -215,7 +237,14 @@ export function ThreadSidebar({
             Load more
           </button>
         )}
-        {threads.length === 0 && (
+        {threads.length === 0 && isLoading && (
+          <div aria-live="polite" className="vbg-custom-loading-state" role="status">
+            <span aria-hidden="true" className="vbg-custom-spinner" />
+            <strong>Loading sessions…</strong>
+            <span>Reading local session history.</span>
+          </div>
+        )}
+        {threads.length === 0 && !isLoading && (
           <div className="vbg-custom-empty-state">
             <Icon name="activity" />
             <strong>No sessions yet</strong>

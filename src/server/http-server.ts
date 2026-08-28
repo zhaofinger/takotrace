@@ -1,12 +1,13 @@
 import { createReadStream, existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import { basename, extname, join, normalize, resolve, sep } from 'node:path';
+import { basename, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { notificationToTrace, threadToHistory } from '../shared/trace.js';
 import { publicHistoricalThread, TraceStore } from '../shared/store.js';
 import type { TraceEvent } from '../shared/types.js';
 import type { CodexClient } from './codex-client.js';
+import { openNativePath } from './native-path-opener.js';
 
 export interface RpcActions {
   startThread(params?: Record<string, unknown>): Promise<unknown>;
@@ -22,6 +23,7 @@ export interface ThreadScopeServerOptions {
   staticDir?: string;
   visualizationDir?: string;
   store?: TraceStore;
+  openPath?: (pathname: string) => Promise<void>;
 }
 
 export class ThreadScopeServer {
@@ -31,6 +33,7 @@ export class ThreadScopeServer {
   private readonly port: number;
   private readonly staticDir: string;
   private readonly visualizationDir: string;
+  private readonly openPath: (pathname: string) => Promise<void>;
   private server?: Server;
   private readonly codexUnsubscribers: Array<() => void> = [];
 
@@ -40,6 +43,7 @@ export class ThreadScopeServer {
     this.port = options.port ?? 4317;
     this.staticDir = resolve(options.staticDir ?? join(process.cwd(), 'dist/web'));
     this.visualizationDir = resolve(options.visualizationDir ?? join(homedir(), '.codex/visualizations'));
+    this.openPath = options.openPath ?? openNativePath;
     this.store = options.store ?? new TraceStore();
   }
 
@@ -90,6 +94,10 @@ export class ThreadScopeServer {
     }
     if ((request.method === 'GET' || request.method === 'HEAD') && path === '/api/source') {
       return this.serveLocalFile(url.searchParams.get('ref'), request, response);
+    }
+    if (path === '/api/host.openPath') {
+      if (request.method !== 'POST') return sendError(response, 405, new Error('Method not allowed'));
+      return this.openLocalPath(request, response);
     }
     const attachment = path.match(/^\/api\/attachments\/([^/]+)\/([^/]+)\/([^/]+)\/(\d+)$/);
     if ((request.method === 'GET' || request.method === 'HEAD') && attachment) {
@@ -282,6 +290,29 @@ export class ThreadScopeServer {
     }
     createReadStream(file).pipe(response);
   }
+
+  private async openLocalPath(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (!isTrustedLocalRequest(request)) return sendError(response, 403, new Error('Forbidden'));
+    const body = await readJson(request);
+    if (typeof body.path !== 'string' || !body.path.trim()) {
+      return sendError(response, 400, new Error('path must be a non-empty string'));
+    }
+    const referencePath = localFileReferencePath(body.path);
+    if (!isAbsolute(referencePath)) return sendError(response, 400, new Error('path must be absolute'));
+    const pathname = resolve(referencePath);
+    if (!existsSync(pathname)) return sendError(response, 404, new Error('Local file not found'));
+    const file = realpathSync(pathname);
+    if (!statSync(file).isFile()) return sendError(response, 403, new Error('Forbidden'));
+    if (!LOCAL_FILE_MIME_TYPES[extname(file).toLowerCase()]) {
+      return sendError(response, 415, new Error('Unsupported local file type'));
+    }
+    try {
+      await this.openPath(file);
+    } catch (error) {
+      throw Object.assign(error instanceof Error ? error : new Error(String(error)), { statusCode: 502 });
+    }
+    return sendJson(response, 200, { opened: true });
+  }
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -368,9 +399,12 @@ function traceItemRaw(value: unknown): Record<string, unknown> {
 }
 
 function localFilePath(reference: string): string {
-  const withLine = reference.match(/^(.*):(\d+)(?::\d+)?$/);
-  const pathname = withLine?.[1] && existsSync(withLine[1]) ? withLine[1] : reference;
-  return resolve(pathname);
+  return resolve(localFileReferencePath(reference));
+}
+
+function localFileReferencePath(reference: string): string {
+  const withLine = reference.match(/^(.*?):(\d+)(?::\d+)?$/);
+  return withLine?.[1] && existsSync(withLine[1]) ? withLine[1] : reference;
 }
 
 function sourceViewerHtml(name: string, contents: string): string {
@@ -380,4 +414,29 @@ function sourceViewerHtml(name: string, contents: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>${escape(name)}</title><style>html{color-scheme:light dark}body{margin:0;padding:24px;background:Canvas;color:CanvasText;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}</style><pre>${escape(contents)}</pre>`;
+}
+
+function isTrustedLocalRequest(request: IncomingMessage): boolean {
+  const host = request.headers.host;
+  const origin = request.headers.origin;
+  if (!host || !origin || request.headers['sec-fetch-site'] === 'cross-site') return false;
+  let hostUrl: URL;
+  try {
+    hostUrl = new URL(`http://${host}`);
+  } catch {
+    return false;
+  }
+  const hostname = hostUrl.hostname;
+  const ipv4 = hostname.split('.');
+  const loopback = hostname === 'localhost' || hostname === '[::1]'
+    || (ipv4.length === 4 && ipv4[0] === '127'
+      && ipv4.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255));
+  const remoteAddress = request.socket.remoteAddress ?? '';
+  const localPeer = remoteAddress === '::1' || remoteAddress.startsWith('127.') || remoteAddress.startsWith('::ffff:127.');
+  if (!loopback || !localPeer) return false;
+  try {
+    return new URL(origin).origin === hostUrl.origin;
+  } catch {
+    return false;
+  }
 }

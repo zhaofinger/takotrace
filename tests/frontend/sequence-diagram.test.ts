@@ -61,7 +61,8 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain("vbg-custom-sequence__step-row--role-user");
     expect(markup).toContain("vbg-custom-sequence__step-row--role-tool");
     expect(markup).toContain("vbg-custom-sequence__step-row--role-agent");
-    expect(markup).toContain("Shell · git status");
+    expect(markup).toContain("vbg-custom-sequence__step-icon");
+    expect(markup).toContain(">git status</strong>");
     expect(markup).toContain('data-tooltip="Shell · git status"');
   });
 
@@ -97,9 +98,39 @@ describe("SequenceDiagram Component", () => {
       items: [createEvent("commandExecution", { command }, { status: "failed" })],
     }));
 
-    expect(markup).toContain("Shell · rg -n sequence src/web");
+    expect(markup).toContain(">rg -n sequence src/web</strong>");
     expect(markup).toContain("vbg-custom-sequence__step-row--status-failed");
     expect(markup).toContain("failed");
+  });
+
+  it("uses an icon and compact name for inferred skill loads", () => {
+    const markup = renderToStaticMarkup(createElement(SequenceDiagram, {
+      items: [createEvent("commandExecution", {
+        command: ["/bin/zsh", "-lc", "cat /Users/bytedance/.agents/skills/read/SKILL.md"],
+        parsed_cmd: [{ type: "read", path: "/Users/bytedance/.agents/skills/read/SKILL.md" }],
+      })],
+    }));
+
+    expect(markup).toContain("vbg-custom-sequence__step-icon");
+    expect(markup).toContain(">read</strong>");
+    expect(markup).toContain('data-tooltip="Skill load · read (inferred)"');
+  });
+
+  it("uses an icon and compact action for Browser MCP executions", () => {
+    const markup = renderToStaticMarkup(createElement(SequenceDiagram, {
+      items: [createEvent("mcpToolCall", {
+        server: "node_repl",
+        tool: "js",
+        arguments: {
+          title: "Inspect the page",
+          code: "await browser.tabs.list()",
+        },
+      })],
+    }));
+
+    expect(markup).toContain("vbg-custom-sequence__step-icon");
+    expect(markup).toContain(">Inspect the page</strong>");
+    expect(markup).toContain('data-tooltip="Browser · Inspect the page"');
   });
 
   it("organizes step details into focused inspector tabs", () => {

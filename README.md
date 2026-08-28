@@ -96,6 +96,7 @@ npm run build
 | `GET` | `/api/subagents/:threadId` | 按需读取 Subagent Session 详情 |
 | `GET` | `/api/visualization?path=...` | 读取本地可视化文件 |
 | `GET` | `/api/source?ref=...` | 读取本地源文件 |
+| `POST` | `/api/host.openPath` | 通过操作系统默认应用打开本地文件（仅限 loopback 同源请求） |
 | `GET` | `/api/attachments/:threadId/:turnId/:itemId/:index` | 读取事件附件 |
 | `POST` | `/api/threads` | 创建 Session（Codex Thread） |
 | `POST` | `/api/threads/:id/resume` | 恢复 Session |

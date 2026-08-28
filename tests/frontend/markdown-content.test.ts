@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { MarkdownContent } from "../../src/web/components/MarkdownContent";
+import { describe, expect, it, vi } from "vitest";
+import { MarkdownContent, requestOpenLocalPath } from "../../src/web/components/MarkdownContent";
 import { EventDetails } from "../../src/web/components/EventDetails";
 
 describe("MarkdownContent", () => {
@@ -43,16 +43,36 @@ describe("MarkdownContent", () => {
     expect(markup).not.toContain("<pre><pre");
   });
 
-  it("routes absolute local file links through the controlled viewer", () => {
+  it("renders absolute local file links as explicit host-open buttons", () => {
     const markup = renderToStaticMarkup(createElement(
       MarkdownContent,
       null,
       "[$eli5](/Users/example/.agents/skills/eli5/SKILL.md)",
     ));
 
-    expect(markup).toContain('href="/api/source?ref=2f55736572732f6578616d706c652f2e6167656e74732f736b696c6c732f656c69352f534b494c4c2e6d64"');
-    expect(markup).not.toContain('href="/Users/example');
-    expect(markup).not.toContain('%2FUsers');
+    expect(markup).toContain('<button aria-label="Open /Users/example/.agents/skills/eli5/SKILL.md"');
+    expect(markup).toContain('class="vbg-custom-markdown__local-file"');
+    expect(markup).toContain('type="button">$eli5</button>');
+    expect(markup).not.toContain('href=');
+    expect(markup).not.toContain('/api/source');
+  });
+
+  it("requests a same-origin host open without converting the path to file://", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }));
+    await requestOpenLocalPath("/Users/example/带 空格.html", fetchImpl);
+
+    expect(fetchImpl).toHaveBeenCalledWith("/api/host.openPath", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "/Users/example/带 空格.html" }),
+    });
+    expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain("file://");
+  });
+
+  it("reports host-open request failures", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 403 }));
+    await expect(requestOpenLocalPath("/Users/example/file.html", fetchImpl))
+      .rejects.toThrow("Unable to open local file (403)");
   });
 
   it("does not execute raw HTML", () => {

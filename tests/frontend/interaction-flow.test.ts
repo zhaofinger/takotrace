@@ -104,7 +104,7 @@ describe("interaction flow", () => {
     });
   });
 
-  it("moves inferred SKILL.md loads into the Skills lane", () => {
+  it("keeps inferred SKILL.md loads as a Tool overview subtype", () => {
     const node = flowNode(event("commandExecution", {
       command: ["/bin/zsh", "-lc", "sed -n '1,260p' /plugins/build-web-apps/skills/react-best-practices/SKILL.md"],
       parsed_cmd: [
@@ -118,15 +118,15 @@ describe("interaction flow", () => {
       label: "Skill",
       title: "Skill load · react-best-practices +1 (inferred)",
     });
-    expect(flowLane(node.kind)).toBe("skill");
+    expect(flowLane(node.kind)).toBe("tool");
   });
 
-  it("places interaction types in stable sequence graph lanes", () => {
+  it("places interaction types in stable Trace overview lanes", () => {
     expect(flowLane("user")).toBe("user");
     expect(flowLane("agent")).toBe("agent");
     expect(flowLane("reasoning")).toBe("agent");
-    expect(flowLane("skill")).toBe("skill");
-    expect(flowLane("mcp")).toBe("mcp");
+    expect(flowLane("skill")).toBe("tool");
+    expect(flowLane("mcp")).toBe("tool");
     expect(flowLane("tool")).toBe("tool");
     expect(flowLane("file")).toBe("tool");
     expect(flowLane("subagent")).toBe("subagent");
@@ -135,11 +135,13 @@ describe("interaction flow", () => {
   it("uses the same role icons across replay, flow, and sequence views", () => {
     expect(flowKindIconName("user")).toBe("user");
     expect(flowKindIconName("agent")).toBe("agent");
-    expect(flowKindIconName("tool")).toBe("terminal");
-    expect(flowKindIconName("mcp")).toBe("network");
+    expect(flowKindIconName("tool")).toBe("tool");
+    expect(flowKindIconName("mcp")).toBe("mcp");
     expect(flowKindIconName("subagent")).toBe("subagent");
-    expect(flowKindIconName("file")).toBe("code");
-    expect(flowKindIconName("web")).toBe("search");
+    expect(flowKindIconName("skill")).toBe("skill");
+    expect(flowKindIconName("file")).toBe("file");
+    expect(flowKindIconName("web")).toBe("web");
+    expect(flowKindIconName("system")).toBe("activity");
   });
 });
 

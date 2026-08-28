@@ -1,4 +1,4 @@
-import { Children, isValidElement, type ReactNode } from "react";
+import { Children, isValidElement, useState, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { HighlightedCode } from "./HighlightedCode";
@@ -6,10 +6,10 @@ import { PreviewableImage } from "./PreviewableImage";
 
 const components: Components = {
   a: ({ children, href, ...props }) => {
-    const localHref = href && /^\/(?:Users|home|private|tmp|var|opt|workspace)(?:\/|$)/.test(href)
-      ? `/api/source?ref=${hexEncode(href)}`
-      : href;
-    return <a {...props} href={localHref} rel="noreferrer" target="_blank">{children}</a>;
+    if (href && /^\/(?:Users|home|private|tmp|var|opt|workspace)(?:\/|$)/.test(href)) {
+      return <LocalFileLink path={href}>{children}</LocalFileLink>;
+    }
+    return <a {...props} href={href} rel="noreferrer" target="_blank">{children}</a>;
   },
   img: ({ alt, src }) => {
     if (src?.includes("/.codex/visualizations/")) {
@@ -41,8 +41,43 @@ function nodeText(value: ReactNode): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
-function hexEncode(value: string): string {
-  return Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, "0")).join("");
+function LocalFileLink({ children, path }: { children: ReactNode; path: string }) {
+  const [error, setError] = useState<string>();
+  const [opening, setOpening] = useState(false);
+
+  const open = async () => {
+    setError(undefined);
+    setOpening(true);
+    try {
+      await requestOpenLocalPath(path);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <button
+      aria-label={`Open ${path}`}
+      className="vbg-custom-markdown__local-file"
+      disabled={opening}
+      onClick={() => void open()}
+      title={error ?? path}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
+export async function requestOpenLocalPath(path: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  const response = await fetchImpl("/api/host.openPath", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  if (!response.ok) throw new Error(`Unable to open local file (${response.status})`);
 }
 
 const remarkPlugins = [remarkGfm];
