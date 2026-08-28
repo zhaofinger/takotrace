@@ -22,6 +22,22 @@ describe('rollout reader', () => {
       entry('event_msg', { type: 'task_started', turn_id: TURN_ID, started_at: 1_767_000_000 }),
       entry('turn_context', { turn_id: TURN_ID }),
       entry('turn_context', { turn_id: TURN_ID }),
+      entry('event_msg', {
+        type: 'token_count',
+        info: {
+          total_token_usage: tokenUsage(100, 80, 20),
+          last_token_usage: tokenUsage(100, 80, 20),
+          model_context_window: 200_000,
+        },
+      }),
+      entry('event_msg', {
+        type: 'token_count',
+        info: {
+          total_token_usage: tokenUsage(160, 125, 35),
+          last_token_usage: tokenUsage(60, 45, 15),
+          model_context_window: 200_000,
+        },
+      }),
       '{broken json',
       entry('unknown_event', { value: 'ignored' }),
       entry('event_msg', {
@@ -48,6 +64,12 @@ describe('rollout reader', () => {
     expect(result?.thread.historySource).toBe('rollout-file');
     const turn = (result?.thread.turns as Array<Record<string, unknown>>)[0];
     expect(turn).toMatchObject({ id: TURN_ID, status: 'completed', durationMs: 3_000 });
+    expect(turn.tokenUsage).toMatchObject({ totalTokens: 160, inputTokens: 125, outputTokens: 35 });
+    expect(result?.thread.tokenUsage).toMatchObject({
+      total: { totalTokens: 160, inputTokens: 125, outputTokens: 35 },
+      last: { totalTokens: 60, inputTokens: 45, outputTokens: 15 },
+      modelContextWindow: 200_000,
+    });
     expect(turn.items).toEqual([
       expect.objectContaining({ id: 'user-1', type: 'userMessage', durationMs: 10 }),
       expect.objectContaining({ id: 'subagent-1', type: 'subAgentActivity', kind: 'completed', agentThreadId: 'child-1' }),
@@ -62,12 +84,17 @@ describe('rollout reader', () => {
       entry('session_meta', { id: THREAD_ID, timestamp: '2026-08-25T12:58:38.000Z' }),
       entry('event_msg', { type: 'task_started', turn_id: TURN_ID, started_at: 1_767_000_000 }),
       entry('event_msg', { type: 'task_complete', turn_id: TURN_ID, completed_at: 1_767_000_003 }),
+      entry('event_msg', {
+        type: 'token_count',
+        info: { total_token_usage: tokenUsage(40, 30, 10), last_token_usage: tokenUsage(40, 30, 10) },
+      }),
     ].join('\n'));
 
     const result = await readRolloutThread(THREAD_ID, { codexHome });
 
     expect(result?.source).toContain('/archived_sessions/');
     expect(result?.thread.turns).toHaveLength(1);
+    expect((result?.thread.turns as Array<Record<string, unknown>>)[0].tokenUsage).toMatchObject({ totalTokens: 40 });
   });
 
   it('rejects non-Codex ids without touching arbitrary paths', async () => {
@@ -84,4 +111,15 @@ async function temporaryCodexHome(): Promise<string> {
 
 function entry(type: string, payload: Record<string, unknown>): string {
   return JSON.stringify({ timestamp: '2026-08-25T12:58:38.000Z', type, payload });
+}
+
+function tokenUsage(total: number, input: number, output: number) {
+  return {
+    total_tokens: total,
+    input_tokens: input,
+    cached_input_tokens: 20,
+    cache_write_input_tokens: 0,
+    output_tokens: output,
+    reasoning_output_tokens: 0,
+  };
 }

@@ -13,7 +13,7 @@ export async function syncThread(threadId: string): Promise<void> {
     method: "POST",
   });
   if (!response.ok) {
-    throw new Error(await responseErrorMessage(response, `Thread sync failed (${response.status})`));
+    throw new Error(await responseErrorMessage(response, `Session sync failed (${response.status})`));
   }
 }
 
@@ -27,7 +27,7 @@ export async function fetchTurnDetail(
     { signal },
   );
   if (!response.ok) {
-    throw new Error(`Turn detail request failed (${response.status})`);
+    throw new Error(`Run detail request failed (${response.status})`);
   }
   const payload = await response.json() as Turn | { turn: Turn };
   return "turn" in payload ? payload.turn : payload;

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DensitySwitch } from "./DensitySwitch";
 import { EventDetails } from "./EventDetails";
+import { ExecutionMetaSummary } from "./ExecutionMetaSummary";
 import { flowKindIconName } from "./InteractionFlow";
 import type { FlowEvent, FlowKind } from "./InteractionFlow";
 import { Icon } from "./Icon";
@@ -12,6 +13,7 @@ import {
   traceReplayModel,
 } from "./trace-replay-model";
 import type { ReplayAction, ReplayDensity, ReplayTimingMode } from "./trace-replay-model";
+import { parallelEvidenceLabel } from "./parallel-execution-model";
 
 type ReplayTimeScale = "actual" | "logical";
 type OverviewLane = "user" | "agent" | "tools" | "subagents";
@@ -269,10 +271,19 @@ function ExecutionGroup({
 }) {
   const status = replayGroupStatus(actions);
   const timing = replayExecutionTiming(actions);
+  const parallelGroups = [...new Map(actions.flatMap((item) => item.parallel ? [[item.parallel.id, item.parallel] as const] : [])).values()];
+  const strongestParallel = parallelGroups.sort((left, right) => right.maxConcurrency - left.maxConcurrency)[0];
+  const parallelBounds = new Map<string, { firstId: string; lastId: string }>();
+  for (const item of actions) {
+    if (!item.parallel) continue;
+    const bounds = parallelBounds.get(item.parallel.id);
+    if (bounds) bounds.lastId = item.id;
+    else parallelBounds.set(item.parallel.id, { firstId: item.id, lastId: item.id });
+  }
   const failedCount = actions.filter((item) => item.status === "failed" || item.status === "error").length;
+  const isToolCallGroup = actions.every((item) => item.kind !== "reasoning" && item.kind !== "system");
   const shouldOpenInitially = status === "failed"
-    || status === "running"
-    || actions.length <= 3;
+    || status === "running";
   const [isOpen, setIsOpen] = useState(shouldOpenInitially);
 
   useEffect(() => {
@@ -289,16 +300,20 @@ function ExecutionGroup({
     >
       <summary>
         <span aria-hidden="true" className="vbg-custom-replay-disclosure"><Icon name="chevron" /></span>
-        <strong>Execution</strong>
-        <span>{actions.length} action{actions.length === 1 ? "" : "s"}</span>
+        <strong>{isToolCallGroup ? `${actions.length} tool call${actions.length === 1 ? "" : "s"}` : "Execution"}</strong>
+        {!isToolCallGroup && <span>{actions.length} actions</span>}
         <span className="vbg-custom-replay-counts">
           {replayActionCounts(actions).map(([label, count]) => <i key={label}>{label}{count > 1 ? ` ×${count}` : ""}</i>)}
-          {timing.maxConcurrency > 1 && (
+          {strongestParallel ? (
+            <i className="vbg-custom-replay-counts__parallel">
+              {parallelEvidenceLabel(strongestParallel)}
+            </i>
+          ) : timing.maxConcurrency > 1 && (
             <i className="vbg-custom-replay-counts__parallel">
               {timing.mode === "observed" ? "Parallel" : "Possible overlap"} ×{timing.maxConcurrency}
             </i>
           )}
-          {timing.mode === "order" ? <i>Order only</i> : timing.mode === "inferred" ? <i title="Estimated from completion time and duration">Estimated</i> : null}
+          {!strongestParallel && (timing.mode === "order" ? <i>Order only</i> : timing.mode === "inferred" ? <i title="Estimated from completion time and duration">Estimated</i> : null)}
           {timing.wallTimeMs !== undefined && timing.wallTimeMs > 0 && <i>{formatDuration(timing.wallTimeMs)}</i>}
         </span>
         {failedCount > 0 && <span className="vbg-custom-replay-failure">{failedCount} failed</span>}
@@ -306,6 +321,9 @@ function ExecutionGroup({
       </summary>
       <ol className="vbg-custom-replay-actions">
         {actions.map((item) => {
+          const bounds = item.parallel ? parallelBounds.get(item.parallel.id) : undefined;
+          const parallelStart = bounds?.firstId === item.id;
+          const parallelEnd = bounds?.lastId === item.id;
           const renderedDurationMs = item.startedAtMs !== undefined && item.completedAtMs !== undefined
             ? Math.max(0, item.completedAtMs - item.startedAtMs)
             : item.durationMs;
@@ -314,11 +332,19 @@ function ExecutionGroup({
               : "Reported";
           return (
             <li
-              className={`vbg-custom-replay-action vbg-custom-replay-action--${item.kind}`}
+              className={`vbg-custom-replay-action vbg-custom-replay-action--${item.kind}${item.parallel ? " vbg-custom-replay-action--parallel" : ""}`}
+              data-parallel-end={item.parallel && parallelEnd || undefined}
+              data-parallel-start={item.parallel && parallelStart || undefined}
               data-selected={selectedId === item.id || undefined}
               id={item.id}
               key={item.id}
             >
+              {item.parallel && parallelStart && (
+                <div className="vbg-custom-replay-parallel-label">
+                  <span>{parallelEvidenceLabel(item.parallel)}</span>
+                  <small>{item.parallel.evidence === "lifecycle" ? "lifecycle overlap" : item.parallel.evidence.replace("-", " ")}</small>
+                </div>
+              )}
               <button
                 type="button"
                 className="vbg-custom-replay-action__summary"
@@ -349,22 +375,17 @@ function ExecutionGroup({
 
 export function ReplayActionInspector({
   action,
-  collapsed,
   onClose,
-  onToggle,
 }: {
   action: ReplayAction;
-  collapsed: boolean;
   onClose: () => void;
-  onToggle: () => void;
 }) {
   const titleId = `replay-action-inspector-title-${action.event.seq}`;
-  const bodyId = `replay-action-inspector-body-${action.event.seq}`;
   const duration = formatDuration(action.durationMs);
 
   return (
     <aside
-      className={`vbg-custom-sequence__inspector vbg-custom-replay-inspector${collapsed ? " vbg-custom-sequence__inspector--collapsed" : ""}`}
+      className="vbg-custom-sequence__inspector vbg-custom-replay-inspector"
       id="replay-action-inspector"
       aria-labelledby={titleId}
     >
@@ -377,17 +398,6 @@ export function ReplayActionInspector({
         <div className="vbg-custom-sequence__inspector-actions">
           <button
             type="button"
-            className="vbg-custom-sequence__inspector-toggle"
-            onClick={onToggle}
-            aria-controls={bodyId}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? "Expand action details" : "Collapse action details"}
-            title={collapsed ? "Expand details" : "Collapse details"}
-          >
-            <Icon name="chevron" />
-          </button>
-          <button
-            type="button"
             className="vbg-custom-sequence__inspector-close"
             onClick={onClose}
             aria-label="Close action details"
@@ -397,14 +407,15 @@ export function ReplayActionInspector({
           </button>
         </div>
       </header>
-      <div className="vbg-custom-sequence__inspector-body" id={bodyId} hidden={collapsed}>
-        <dl className="vbg-custom-sequence__inspector-meta">
-          <div><dt>From</dt><dd>agent</dd></div>
-          <div><dt>To</dt><dd>{action.kind}</dd></div>
-          <div><dt>Type</dt><dd>call</dd></div>
-          <div><dt>Time</dt><dd>{formatTime(action.event.at)}</dd></div>
-          {duration && <div><dt>Duration</dt><dd>{duration}</dd></div>}
-        </dl>
+      <div className="vbg-custom-sequence__inspector-body">
+        <ExecutionMetaSummary
+          duration={duration}
+          from="agent"
+          startedAt={action.event.at}
+          startedAtLabel={formatTime(action.event.at)}
+          to={action.kind}
+          type="call"
+        />
         <EventDetails event={action.event} fallback={action.detail} />
       </div>
     </aside>
@@ -414,7 +425,7 @@ export function ReplayActionInspector({
 export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
   const [density, setDensity] = useState<ReplayDensity>("key");
   const [selectedId, setSelectedId] = useState<string>();
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const streamRef = useRef<HTMLOListElement>(null);
   const model = useMemo(() => traceReplayModel(items, density), [density, items]);
   const overview = useMemo(() => overviewItems(model), [model]);
   const selectedAction = useMemo(() => model.blocks
@@ -426,14 +437,36 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
   useEffect(() => {
     if (selectedId && !overview.some((item) => item.id === selectedId)) {
       setSelectedId(undefined);
-      setInspectorCollapsed(false);
     }
   }, [overview, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let revealFrame = 0;
+    const layoutFrame = window.requestAnimationFrame(() => {
+      revealFrame = window.requestAnimationFrame(() => {
+        const stream = streamRef.current;
+        const target = document.getElementById(selectedId);
+        if (!stream || !target) return;
+        const streamRect = stream.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const edgePadding = 12;
+        if (targetRect.bottom > streamRect.bottom - edgePadding) {
+          stream.scrollTop += targetRect.bottom - streamRect.bottom + edgePadding;
+        } else if (targetRect.top < streamRect.top + edgePadding) {
+          stream.scrollTop -= streamRect.top - targetRect.top + edgePadding;
+        }
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(layoutFrame);
+      window.cancelAnimationFrame(revealFrame);
+    };
+  }, [selectedId]);
 
   const closeInspector = () => {
     const actionId = selectedAction?.id;
     setSelectedId(undefined);
-    setInspectorCollapsed(false);
     if (actionId) {
       requestAnimationFrame(() => document.getElementById(`replay-action-trigger-${actionId}`)?.focus());
     }
@@ -445,7 +478,6 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
       return;
     }
     setSelectedId(id);
-    setInspectorCollapsed(false);
   };
 
   const selectOverviewItem = (id: string) => {
@@ -454,8 +486,6 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
       return;
     }
     setSelectedId(id);
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    document.getElementById(id)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
   };
 
   return (
@@ -482,7 +512,7 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
         <ReplayOverview items={overview} onSelect={selectOverviewItem} scale={effectiveScale} selectedId={selectedId} />
       </div>
       <div className={`vbg-custom-replay-workspace${selectedAction ? " vbg-custom-replay-workspace--with-inspector" : ""}`}>
-        <ol className="vbg-custom-replay-stream">
+        <ol className="vbg-custom-replay-stream" ref={streamRef}>
           {model.blocks.map((block) => block.type === "execution" ? (
             <li className="vbg-custom-replay-execution-block" key={block.id}>
               <ExecutionGroup actions={block.actions} selectedId={selectedId} onSelectAction={selectAction} />
@@ -509,9 +539,7 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
         {selectedAction && (
           <ReplayActionInspector
             action={selectedAction}
-            collapsed={inspectorCollapsed}
             onClose={closeInspector}
-            onToggle={() => setInspectorCollapsed((current) => !current)}
           />
         )}
       </div>

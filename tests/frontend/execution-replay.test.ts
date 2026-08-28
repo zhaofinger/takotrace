@@ -46,8 +46,24 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).toMatch(/vbg-custom-replay-overview__bar[^>]+width:max\(6px, [\d.]+%\)/);
     const overviewWidths = [...markup.matchAll(/width:max\(6px, ([\d.]+)%\)/g)].map((match) => Number(match[1]));
     expect(new Set(overviewWidths).size).toBeGreaterThan(1);
-    expect(markup).toContain("Tool · npm test · 3.0s");
+    expect(markup).toContain("Tool · Shell · npm test · 3.0s");
     expect(markup).not.toContain("<span>Input</span>");
+  });
+
+  it("renders lifecycle overlap as confirmed parallel execution without timestamps", () => {
+    const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
+      items: [
+        lifecycleEvent(1, "item/started", "first", "running"),
+        lifecycleEvent(2, "item/started", "second", "running"),
+        lifecycleEvent(3, "item/completed", "second", "completed"),
+        lifecycleEvent(4, "item/completed", "first", "completed"),
+      ],
+    }));
+
+    expect(markup).toContain("Parallel ×2");
+    expect(markup).toContain("lifecycle overlap");
+    expect(markup.match(/vbg-custom-replay-action--parallel/g)).toHaveLength(2);
+    expect(markup).not.toContain("Order only");
   });
 
   it("falls back to sequence when events share the same timestamp", () => {
@@ -99,8 +115,14 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).not.toContain("Parallel");
   });
 
-  it("keeps large completed executions collapsed by default", () => {
-    const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
+  it("keeps completed tool call groups collapsed by default", () => {
+    const singleCallMarkup = renderToStaticMarkup(createElement(ExecutionReplay, {
+      items: [
+        event(1, "agentMessage"),
+        event(2, "commandExecution", { command: "one" }),
+      ],
+    }));
+    const multipleCallsMarkup = renderToStaticMarkup(createElement(ExecutionReplay, {
       items: [
         event(1, "agentMessage"),
         event(2, "commandExecution", { command: "one" }),
@@ -110,9 +132,29 @@ describe("ExecutionReplay waterfall", () => {
       ],
     }));
 
-    expect(markup).toContain("4 actions");
-    expect(markup).toContain('<details class="vbg-custom-replay-execution">');
-    expect(markup).not.toContain('<details class="vbg-custom-replay-execution" open="">');
+    expect(singleCallMarkup).toContain("1 tool call");
+    expect(singleCallMarkup).not.toContain('<details class="vbg-custom-replay-execution" open="">');
+    expect(multipleCallsMarkup).toContain("4 tool calls");
+    expect(multipleCallsMarkup).toContain('<details class="vbg-custom-replay-execution">');
+    expect(multipleCallsMarkup).not.toContain('<details class="vbg-custom-replay-execution" open="">');
+  });
+
+  it("keeps running and failed tool call groups expanded", () => {
+    const runningMarkup = renderToStaticMarkup(createElement(ExecutionReplay, {
+      items: [
+        event(1, "agentMessage"),
+        { ...event(2, "commandExecution", { command: "npm test" }), status: "running" },
+      ],
+    }));
+    const failedMarkup = renderToStaticMarkup(createElement(ExecutionReplay, {
+      items: [
+        event(1, "agentMessage"),
+        event(2, "commandExecution", { command: "false", exitCode: 1 }),
+      ],
+    }));
+
+    expect(runningMarkup).toContain('<details class="vbg-custom-replay-execution" open="">');
+    expect(failedMarkup).toContain('<details class="vbg-custom-replay-execution" open="">');
   });
 
   it("keeps per-action duration compact while the overview carries timing", () => {
@@ -156,15 +198,16 @@ describe("ExecutionReplay waterfall", () => {
         status: "completed",
         timing: "order",
       },
-      collapsed: false,
       onClose: () => undefined,
-      onToggle: () => undefined,
     }));
 
     expect(markup).toContain('class="vbg-custom-replay-action__summary"');
     expect(markup).not.toContain('vbg-custom-replay-action__detail');
     expect(markup).not.toContain("Result · 1 block");
     expect(inspectorMarkup).toContain('id="replay-action-inspector"');
+    expect(inspectorMarkup).not.toContain("Collapse action details");
+    expect(inspectorMarkup).not.toContain("Expand action details");
+    expect(inspectorMarkup).toContain("Close action details");
     expect(inspectorMarkup).toContain("Result · 1 block");
     expect(inspectorMarkup).toContain("done");
   });
@@ -183,7 +226,31 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).toContain('vbg-custom-replay-action__label">Fork</span>');
     expect(markup).toContain('vbg-custom-replay-action__label">Join</span>');
   });
+
+  it("labels multiple collaboration forks as a parallel dispatch", () => {
+    const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
+      items: [
+        event(1, "agentMessage"),
+        event(2, "collabAgentToolCall", { tool: "spawnAgent", receiverThreadIds: ["child-1"] }),
+        event(3, "collabAgentToolCall", { tool: "spawnAgent", receiverThreadIds: ["child-2"] }),
+        event(4, "collabAgentToolCall", { tool: "wait", receiverThreadIds: ["child-1", "child-2"] }),
+      ],
+    }));
+
+    expect(markup).toContain("Parallel dispatch ×2");
+    expect(markup).toContain("fork join");
+  });
 });
+
+function lifecycleEvent(seq: number, method: string, itemId: string, status: TraceEvent["status"]): TraceEvent {
+  return {
+    ...event(seq, "commandExecution", { command: itemId }),
+    at: "2026-01-01T00:00:00.000Z",
+    method,
+    itemId,
+    status,
+  };
+}
 
 function event(seq: number, type: string, raw: Record<string, unknown> = {}): TraceEvent {
   return {

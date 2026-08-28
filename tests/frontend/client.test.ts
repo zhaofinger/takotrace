@@ -30,6 +30,6 @@ describe("syncThread", () => {
   it("falls back to the HTTP status for non-JSON errors", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("bad gateway", { status: 502 })));
 
-    await expect(syncThread("thread-1")).rejects.toThrow("Thread sync failed (502)");
+    await expect(syncThread("thread-1")).rejects.toThrow("Session sync failed (502)");
   });
 });

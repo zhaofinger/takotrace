@@ -3,6 +3,8 @@ import { readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { addTokenUsage, normalizeThreadTokenUsage, tokenUsageDelta } from '../shared/trace.js';
+import type { ThreadTokenUsage, TokenUsageBreakdown } from '../shared/types.js';
 
 const THREAD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,6 +23,7 @@ interface RolloutTurn {
   startedAt?: number;
   completedAt?: number;
   durationMs?: number;
+  tokenUsage?: TokenUsageBreakdown;
   items: Map<string, Record<string, unknown>>;
 }
 
@@ -38,6 +41,10 @@ export async function readRolloutThread(
   let firstTimestamp: number | undefined;
   let lastTimestamp: number | undefined;
   let preview: string | undefined;
+  let activeTurnId: string | undefined;
+  let mostRecentTurnId: string | undefined;
+  let latestTokenUsage: ThreadTokenUsage | undefined;
+  let previousTotal: TokenUsageBreakdown | undefined;
 
   const lines = createInterface({ input: createReadStream(source, { encoding: 'utf8' }), crlfDelay: Infinity });
   for await (const line of lines) {
@@ -62,21 +69,46 @@ export async function readRolloutThread(
     }
     if (entry.type === 'turn_context') {
       const turnId = stringField(payload.turn_id);
-      if (turnId) getOrCreateTurn(turns, turnId);
+      if (turnId) {
+        activeTurnId = turnId;
+        mostRecentTurnId = turnId;
+        getOrCreateTurn(turns, turnId);
+      }
       continue;
     }
     if (entry.type !== 'event_msg') continue;
 
     const eventType = stringField(payload.type);
+    if (eventType === 'token_count') {
+      const tokenUsage = normalizeThreadTokenUsage(payload.info ?? payload.token_usage ?? payload.tokenUsage);
+      if (!tokenUsage) continue;
+      // task_complete normally follows the final token_count, but some rollouts flush usage just after it.
+      // Prefer the active turn and otherwise keep that trailing snapshot on the most recently completed turn.
+      const usageTurnId = activeTurnId ?? mostRecentTurnId;
+      if (usageTurnId) {
+        const turn = getOrCreateTurn(turns, usageTurnId);
+        turn.tokenUsage = addTokenUsage(
+          turn.tokenUsage,
+          tokenUsageDelta(tokenUsage.total, previousTotal, tokenUsage.last),
+        );
+      }
+      previousTotal = tokenUsage.total;
+      latestTokenUsage = tokenUsage;
+      continue;
+    }
     const turnId = stringField(payload.turn_id);
     if (!eventType || !turnId) continue;
     const turn = getOrCreateTurn(turns, turnId);
     if (eventType === 'task_started') {
+      activeTurnId = turnId;
+      mostRecentTurnId = turnId;
       turn.status = 'inProgress';
       turn.startedAt = numberField(payload.started_at) ?? timestamp ?? turn.startedAt;
       continue;
     }
     if (eventType === 'task_complete' || eventType === 'task_failed') {
+      mostRecentTurnId = turnId;
+      if (activeTurnId === turnId) activeTurnId = undefined;
       turn.status = eventType === 'task_failed' ? 'failed' : 'completed';
       turn.startedAt = numberField(payload.started_at) ?? turn.startedAt;
       turn.completedAt = numberField(payload.completed_at) ?? timestamp ?? turn.completedAt;
@@ -84,6 +116,8 @@ export async function readRolloutThread(
       continue;
     }
     if (eventType !== 'item_completed') continue;
+    activeTurnId = turnId;
+    mostRecentTurnId = turnId;
 
     const item = normalizeItem(payload.item, payload);
     const itemId = stringField(item.id);
@@ -93,13 +127,14 @@ export async function readRolloutThread(
   }
 
   const historicalTurns = [...turns.values()]
-    .filter((turn) => turn.items.size > 0 || turn.startedAt !== undefined || turn.completedAt !== undefined)
+    .filter((turn) => turn.items.size > 0 || turn.startedAt !== undefined || turn.completedAt !== undefined || turn.tokenUsage !== undefined)
     .map((turn) => ({
       id: turn.id,
       status: turn.status,
       ...(turn.startedAt === undefined ? {} : { startedAt: turn.startedAt }),
       ...(turn.completedAt === undefined ? {} : { completedAt: turn.completedAt }),
       ...(turn.durationMs === undefined ? {} : { durationMs: turn.durationMs }),
+      ...(turn.tokenUsage === undefined ? {} : { tokenUsage: turn.tokenUsage }),
       items: [...turn.items.values()],
     }));
   if (!historicalTurns.length) return undefined;
@@ -113,7 +148,7 @@ export async function readRolloutThread(
     thread: {
       id: threadId,
       sessionId: stringField(sessionMeta.session_id),
-      preview: truncate(preview ?? `Thread ${threadId.slice(0, 8)}`, 160),
+      preview: truncate(preview ?? `Session ${threadId.slice(0, 8)}`, 160),
       status: { type: allCompleted ? 'idle' : 'active' },
       historySource: 'rollout-file',
       createdAt,
@@ -123,6 +158,7 @@ export async function readRolloutThread(
       cliVersion: stringField(sessionMeta.cli_version),
       source: sessionMeta.source,
       threadSource: stringField(sessionMeta.thread_source),
+      ...(latestTokenUsage === undefined ? {} : { tokenUsage: latestTokenUsage }),
       turns: historicalTurns,
     },
   };

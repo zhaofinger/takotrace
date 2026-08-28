@@ -129,11 +129,11 @@ export class ThreadScopeServer {
       const threadId = decodePathSegment(turnDetail[1]);
       const turnId = decodePathSegment(turnDetail[2]);
       const turn = this.store.getTurn(threadId, turnId);
-      return turn ? sendJson(response, 200, { turn }) : sendError(response, 404, new Error('Turn not found'));
+      return turn ? sendJson(response, 200, { turn }) : sendError(response, 404, new Error('Run not found'));
     }
     const sync = path.match(/^\/api\/threads\/([^/]+)\/sync$/);
     if (request.method === 'POST' && sync) {
-      if (!this.client.syncThread) return sendError(response, 501, new Error('Thread sync is unavailable'));
+      if (!this.client.syncThread) return sendError(response, 501, new Error('Session sync is unavailable'));
       await this.client.syncThread(decodeURIComponent(sync[1]));
       return sendJson(response, 200, { ok: true });
     }
@@ -143,7 +143,7 @@ export class ThreadScopeServer {
 
   private async serveSubagentDetail(threadId: string, response: ServerResponse): Promise<void> {
     if (!this.client.readThread) {
-      return sendError(response, 501, new Error('Subagent thread details are unavailable'));
+      return sendError(response, 501, new Error('Subagent session details are unavailable'));
     }
     let result: unknown;
     try {
@@ -152,7 +152,7 @@ export class ThreadScopeServer {
       const cause = error instanceof Error ? error : new Error(String(error));
       const notFound = /not[ -]?found|unknown thread/i.test(cause.message);
       const wrapped = Object.assign(
-        new Error(notFound ? 'Subagent thread not found' : `Unable to read subagent thread: ${cause.message}`),
+        new Error(notFound ? 'Subagent session not found' : `Unable to read subagent session: ${cause.message}`),
         { statusCode: notFound ? 404 : 502 },
       );
       return sendError(response, wrapped.statusCode, wrapped);
@@ -162,7 +162,7 @@ export class ThreadScopeServer {
       ? { ...recordValue(rawThread), turnsLoaded: true }
       : rawThread);
     if (!thread || thread.id !== threadId) {
-      return sendError(response, 404, new Error('Subagent thread not found'));
+      return sendError(response, 404, new Error('Subagent session not found'));
     }
     return sendJson(response, 200, { thread: publicHistoricalThread(thread) });
   }
@@ -289,7 +289,7 @@ const MIME_TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
-  '.svg': 'text/plain; charset=utf-8',
+  '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
 };

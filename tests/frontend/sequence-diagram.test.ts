@@ -2,7 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { FlowEvent } from "../../src/web/components/InteractionFlow";
-import { SequenceDiagram } from "../../src/web/components/SequenceDiagram";
+import { SequenceDiagram, SequenceStepInspector } from "../../src/web/components/SequenceDiagram";
+import { buildSequenceDiagramModel } from "../../src/web/components/sequence-diagram-model";
 
 function createEvent(type: string, raw: unknown, overrides: Partial<FlowEvent> = {}): FlowEvent {
   return {
@@ -57,7 +58,23 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain("Tools");
     expect(markup).toContain("vbg-custom-sequence__workspace");
     expect(markup).toContain("vbg-custom-sequence__step-row");
-    expect(markup).toContain("git status");
+    expect(markup).toContain("vbg-custom-sequence__step-row--role-user");
+    expect(markup).toContain("vbg-custom-sequence__step-row--role-tool");
+    expect(markup).toContain("vbg-custom-sequence__step-row--role-agent");
+    expect(markup).toContain("Shell · git status");
+    expect(markup).toContain('data-tooltip="Shell · git status"');
+  });
+
+  it("makes lifecycle parallelism visible in the sequence UI", () => {
+    const markup = renderToStaticMarkup(createElement(SequenceDiagram, { items: [
+      { ...sampleItems[1], seq: 1, itemId: "first", method: "item/started", status: "running", at: "2026-01-01T00:00:00.000Z" },
+      { ...sampleItems[1], seq: 2, itemId: "second", method: "item/started", status: "running", at: "2026-01-01T00:00:00.000Z" },
+      { ...sampleItems[1], seq: 3, itemId: "second", method: "item/completed", status: "completed", at: "2026-01-01T00:00:00.000Z" },
+      { ...sampleItems[1], seq: 4, itemId: "first", method: "item/completed", status: "completed", at: "2026-01-01T00:00:00.000Z" },
+    ] }));
+
+    expect(markup).toContain("Parallel ×2");
+    expect(markup.match(/vbg-custom-sequence__step-row--parallel(?:\s|")/g)).toHaveLength(2);
   });
 
   it("hides reasoning by default and exposes the full-step count", () => {
@@ -80,7 +97,35 @@ describe("SequenceDiagram Component", () => {
       items: [createEvent("commandExecution", { command }, { status: "failed" })],
     }));
 
-    expect(markup).toContain("rg -n sequence src/web");
+    expect(markup).toContain("Shell · rg -n sequence src/web");
+    expect(markup).toContain("vbg-custom-sequence__step-row--status-failed");
     expect(markup).toContain("failed");
+  });
+
+  it("organizes step details into focused inspector tabs", () => {
+    const [step] = buildSequenceDiagramModel([
+      createEvent("commandExecution", {
+        command: "git status",
+        cwd: "/workspace",
+        aggregatedOutput: "working tree clean",
+        exitCode: 0,
+      }),
+    ]).steps;
+    const markup = renderToStaticMarkup(createElement(SequenceStepInspector, {
+      step,
+      onClose: () => undefined,
+    }));
+
+    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('role="tab"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain("Summary");
+    expect(markup).toContain("Payload");
+    expect(markup).toContain("Result");
+    expect(markup).toContain("Timing");
+    expect(markup).toContain("TOOL");
+    expect(markup).toContain('role="tabpanel"');
+    expect(markup).toContain("Details");
+    expect(markup).toContain("working tree clean");
   });
 });

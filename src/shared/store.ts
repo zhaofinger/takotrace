@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { threadToHistory } from './trace.js';
+import { addTokenUsage, threadToHistory, tokenUsageDelta } from './trace.js';
 import type {
   AppState, CompactAppState, ConnectionStatus, HistoricalThread, ThreadState, TraceEvent, TurnState,
 } from './types.js';
@@ -46,12 +46,14 @@ export class TraceStore {
         updatedAt: thread.updatedAt,
         cwd: thread.cwd,
         projectFolder: thread.projectFolder,
+        tokenUsage: thread.tokenUsage,
         turns: thread.turns.map((turn) => ({
           id: turn.id,
           status: turn.status,
           startedAt: turn.startedAt,
           completedAt: turn.completedAt,
           durationMs: turn.durationMs,
+          tokenUsage: turn.tokenUsage,
           summary: compactTurnSummary(turn),
           itemCount: turn.items.length,
           items: [],
@@ -70,6 +72,7 @@ export class TraceStore {
       startedAt: turn.startedAt,
       completedAt: turn.completedAt,
       durationMs: turn.durationMs,
+      tokenUsage: turn.tokenUsage,
       items: turn.items.map((item) => ({ ...item, raw: sanitizeRaw(item.raw) })),
     };
   }
@@ -130,8 +133,16 @@ export class TraceStore {
     thread.updatedAt = event.at;
     if (event.method === 'thread/started') thread.status = 'running';
     if (event.method === 'thread/closed') thread.status = 'completed';
+    const previousTotal = thread.tokenUsage?.total;
+    if (event.tokenUsage) thread.tokenUsage = event.tokenUsage;
     if (!event.turnId) return;
     const turn = this.getOrCreateTurn(thread, event);
+    if (event.tokenUsage) {
+      turn.tokenUsage = addTokenUsage(
+        turn.tokenUsage,
+        tokenUsageDelta(event.tokenUsage.total, previousTotal, event.tokenUsage.last),
+      );
+    }
     if (event.method === 'turn/started') {
       turn.status = 'running';
       turn.startedAt ??= event.at;
@@ -164,6 +175,9 @@ export class TraceStore {
       thread.historySource = history.historySource ?? thread.historySource;
       thread.cwd = history.cwd ?? thread.cwd;
       thread.projectFolder = history.projectFolder ?? thread.projectFolder;
+      if (!thread.tokenUsage || (history.tokenUsage?.total.totalTokens ?? -1) >= thread.tokenUsage.total.totalTokens) {
+        thread.tokenUsage = history.tokenUsage ?? thread.tokenUsage;
+      }
       if (history.updatedAt >= thread.updatedAt && !this.liveThreadIds.has(history.id)) {
         thread.status = history.status;
         thread.updatedAt = history.updatedAt;
@@ -179,6 +193,9 @@ export class TraceStore {
         turn.startedAt = historicalTurn.startedAt ?? turn.startedAt;
         turn.completedAt = historicalTurn.completedAt ?? turn.completedAt;
         turn.durationMs = historicalTurn.durationMs ?? turn.durationMs;
+        if (!turn.tokenUsage || (historicalTurn.tokenUsage?.totalTokens ?? -1) >= turn.tokenUsage.totalTokens) {
+          turn.tokenUsage = historicalTurn.tokenUsage ?? turn.tokenUsage;
+        }
       }
       for (const input of historicalTurn.items) {
         const existing = this.findEvent(input);
@@ -208,7 +225,7 @@ export class TraceStore {
     if (!thread) {
       thread = {
         id: event.threadId,
-        title: event.summary || `Thread ${event.threadId.slice(0, 8)}`,
+        title: event.summary || `Session ${event.threadId.slice(0, 8)}`,
         status: event.status,
         turnsLoaded: true,
         createdAt: event.at,
@@ -255,7 +272,7 @@ function compactTurnSummary(turn: TurnState): string {
       break;
     }
   }
-  return agentMessage?.summary || turn.items.find((item) => item.summary)?.summary || `Turn ${turn.id}`;
+  return agentMessage?.summary || turn.items.find((item) => item.summary)?.summary || `Run ${turn.id}`;
 }
 
 function normalizeType(value: string): string {

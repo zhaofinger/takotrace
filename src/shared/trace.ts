@@ -1,4 +1,6 @@
-import type { EntityStatus, HistoricalThread, RpcNotification, TraceEvent } from './types.js';
+import type {
+  EntityStatus, HistoricalThread, RpcNotification, ThreadTokenUsage, TokenUsageBreakdown, TraceEvent,
+} from './types.js';
 
 type RecordValue = Record<string, unknown>;
 
@@ -75,6 +77,56 @@ function nullableString(value: unknown): string | null | undefined {
   return value === null || typeof value === 'string' ? value : undefined;
 }
 
+const TOKEN_FIELDS = [
+  ['totalTokens', 'total_tokens'],
+  ['inputTokens', 'input_tokens'],
+  ['cachedInputTokens', 'cached_input_tokens'],
+  ['cacheWriteInputTokens', 'cache_write_input_tokens'],
+  ['outputTokens', 'output_tokens'],
+  ['reasoningOutputTokens', 'reasoning_output_tokens'],
+] as const;
+
+export function normalizeTokenUsageBreakdown(value: unknown): TokenUsageBreakdown | undefined {
+  const source = record(value);
+  if (!TOKEN_FIELDS.some(([camel, snake]) => numberAt(source, [camel], [snake]) !== undefined)) return undefined;
+  return Object.fromEntries(
+    TOKEN_FIELDS.map(([camel, snake]) => [camel, numberAt(source, [camel], [snake]) ?? 0]),
+  ) as unknown as TokenUsageBreakdown;
+}
+
+export function normalizeThreadTokenUsage(value: unknown): ThreadTokenUsage | undefined {
+  const source = record(value);
+  const total = normalizeTokenUsageBreakdown(source.total ?? source.totalTokenUsage ?? source.total_token_usage);
+  const last = normalizeTokenUsageBreakdown(source.last ?? source.lastTokenUsage ?? source.last_token_usage);
+  if (!total && !last) return undefined;
+  const modelContextWindow = numberAt(source, ['modelContextWindow'], ['model_context_window']);
+  return {
+    total: total ?? last!,
+    last: last ?? total!,
+    ...(modelContextWindow === undefined ? {} : { modelContextWindow }),
+  };
+}
+
+export function tokenUsageDelta(
+  current: TokenUsageBreakdown,
+  previous: TokenUsageBreakdown | undefined,
+  fallback: TokenUsageBreakdown,
+): TokenUsageBreakdown {
+  if (!previous || current.totalTokens < previous.totalTokens) return { ...fallback };
+  return Object.fromEntries(
+    TOKEN_FIELDS.map(([field]) => [field, Math.max(0, current[field] - previous[field])]),
+  ) as unknown as TokenUsageBreakdown;
+}
+
+export function addTokenUsage(
+  current: TokenUsageBreakdown | undefined,
+  delta: TokenUsageBreakdown,
+): TokenUsageBreakdown {
+  return Object.fromEntries(
+    TOKEN_FIELDS.map(([field]) => [field, (current?.[field] ?? 0) + delta[field]]),
+  ) as unknown as TokenUsageBreakdown;
+}
+
 function subagentSpawnSource(value: unknown): RecordValue {
   const source = record(value);
   const subagent = record(source.subAgent ?? source.subagent);
@@ -94,6 +146,9 @@ export function notificationToTrace(notification: RpcNotification): Omit<TraceEv
     ? numberAt(params, ['turn', 'completedAt'])
     : numberAt(params, ['turn', 'startedAt']);
   const timestamp = emittedAtMs ?? (turnAtSeconds === undefined ? Date.now() : turnAtSeconds * 1_000);
+  const tokenUsage = normalizeThreadTokenUsage(
+    record(params).tokenUsage ?? record(params).token_usage ?? record(params).info,
+  );
   return {
     at: new Date(timestamp).toISOString(),
     startedAt: startedAtMs === undefined
@@ -111,6 +166,7 @@ export function notificationToTrace(notification: RpcNotification): Omit<TraceEv
     parentItemId: stringAt(params, ['parentItemId'], ['parent_item_id'], ['item', 'parentItemId'], ['item', 'parent_id']),
     summary: summaryFor(method, params),
     durationMs: numberAt(params, ['item', 'durationMs'], ['turn', 'durationMs']),
+    tokenUsage,
     raw: notification,
   };
 }
@@ -131,12 +187,13 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
   const agentPath = nullableString(thread.agentPath)
     ?? nullableString(spawnSource.agent_path)
     ?? nullableString(spawnSource.agentPath);
+  const tokenUsage = normalizeThreadTokenUsage(thread.tokenUsage ?? thread.token_usage);
   return {
     id,
     sessionId: stringAt(thread, ['sessionId']),
     forkedFromId: nullableString(thread.forkedFromId),
     parentThreadId,
-    title: stringAt(thread, ['name'], ['preview']) ?? `Thread ${id.slice(0, 8)}`,
+    title: stringAt(thread, ['name'], ['preview']) ?? `Session ${id.slice(0, 8)}`,
     status: entityStatus(thread.status),
     turnsLoaded: thread.turnsLoaded === true,
     historySource: thread.historySource === 'rollout-file' || thread.historySource === 'app-server'
@@ -156,6 +213,7 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
     agentRole,
     agentPath,
     depth: numberAt(thread, ['depth']) ?? numberAt(spawnSource, ['depth']),
+    tokenUsage,
     turns: rawTurns.flatMap((rawTurn) => {
       const turn = record(rawTurn);
       const turnId = stringAt(turn, ['id']);
@@ -164,6 +222,7 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
       const startedAt = typeof turn.startedAt === 'number' ? isoAt(turn.startedAt, createdAt) : undefined;
       const completedAt = typeof turn.completedAt === 'number' ? isoAt(turn.completedAt, updatedAt) : undefined;
       const durationMs = numberAt(turn, ['durationMs']);
+      const tokenUsage = normalizeTokenUsageBreakdown(turn.tokenUsage ?? turn.token_usage);
       const at = completedAt ?? startedAt ?? updatedAt;
       const rawItems = Array.isArray(turn.items) ? turn.items : [];
       const items = rawItems.flatMap((rawItem): Array<Omit<TraceEvent, 'seq'>> => {
@@ -191,7 +250,7 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
           raw: rawItem,
         }];
       });
-      return [{ id: turnId, status, startedAt, completedAt, durationMs, items }];
+      return [{ id: turnId, status, startedAt, completedAt, durationMs, tokenUsage, items }];
     }),
   };
 }

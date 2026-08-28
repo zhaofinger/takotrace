@@ -2,8 +2,25 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'er
 export type EntityStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type HistorySource = 'app-server' | 'rollout-file';
 
+export interface TokenUsageBreakdown {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+}
+
+export interface ThreadTokenUsage {
+  total: TokenUsageBreakdown;
+  last: TokenUsageBreakdown;
+  modelContextWindow?: number;
+}
+
 export interface TraceEvent {
   seq: number;
+  startedSeq?: number;
+  completedSeq?: number;
   at: string;
   startedAt?: string;
   completedAt?: string;
@@ -16,6 +33,7 @@ export interface TraceEvent {
   parentItemId?: string;
   summary: string;
   durationMs?: number;
+  tokenUsage?: ThreadTokenUsage;
   raw: unknown;
 }
 
@@ -25,6 +43,7 @@ export interface TurnState {
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;
+  tokenUsage?: TokenUsageBreakdown;
   items: TraceEvent[];
 }
 
@@ -38,6 +57,7 @@ export interface ThreadState {
   updatedAt: string;
   cwd?: string;
   projectFolder?: string;
+  tokenUsage?: ThreadTokenUsage;
   turns: TurnState[];
 }
 
@@ -71,6 +91,7 @@ export interface HistoricalTurn {
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;
+  tokenUsage?: TokenUsageBreakdown;
   items: Array<Omit<TraceEvent, 'seq'>>;
 }
 
@@ -97,6 +118,7 @@ export interface HistoricalThread {
   agentRole?: string | null;
   agentPath?: string | null;
   depth?: number;
+  tokenUsage?: ThreadTokenUsage;
   turns: HistoricalTurn[];
 }
 

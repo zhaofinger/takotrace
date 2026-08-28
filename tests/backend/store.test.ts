@@ -114,6 +114,47 @@ describe('TraceStore', () => {
       items: [],
     });
   });
+
+  it('attributes realtime cumulative token deltas once and falls back to last usage after a reset', () => {
+    const store = new TraceStore();
+    store.add({ ...event('turn/started', 'running'), turnId: 'turn-1' });
+    store.add({
+      ...event('thread/tokenUsage/updated', 'pending'), turnId: 'turn-1',
+      tokenUsage: threadUsage(100, 100),
+    });
+    store.add({
+      ...event('thread/tokenUsage/updated', 'pending'), turnId: 'turn-1',
+      tokenUsage: threadUsage(160, 60),
+    });
+    store.add({
+      ...event('thread/tokenUsage/updated', 'pending'), turnId: 'turn-1',
+      tokenUsage: threadUsage(160, 60),
+    });
+    store.add({ ...event('turn/started', 'running'), turnId: 'turn-2' });
+    store.add({
+      ...event('thread/tokenUsage/updated', 'pending'), turnId: 'turn-2',
+      tokenUsage: threadUsage(30, 30),
+    });
+
+    const state = store.snapshot();
+    expect(state.threads[0].tokenUsage?.total.totalTokens).toBe(30);
+    expect(state.threads[0].turns[0].tokenUsage?.totalTokens).toBe(160);
+    expect(state.threads[0].turns[1].tokenUsage?.totalTokens).toBe(30);
+    expect(store.publicSnapshot().threads[0].turns[0].tokenUsage?.totalTokens).toBe(160);
+    expect(store.getTurn('thread-1', 'turn-1')?.tokenUsage?.totalTokens).toBe(160);
+  });
+
+  it('does not clear live token usage during a metadata-only history refresh', () => {
+    const store = new TraceStore();
+    store.add({
+      ...event('thread/tokenUsage/updated', 'pending', 'history-1'), turnId: 'turn-1',
+      tokenUsage: threadUsage(100, 100),
+    });
+
+    store.synchronizeThreads([{ ...historyThread(), turns: [], turnsLoaded: false }]);
+
+    expect(store.snapshot().threads[0].tokenUsage?.total.totalTokens).toBe(100);
+  });
 });
 
 function event(method: string, status: 'pending' | 'running' | 'completed' | 'failed', threadId = 'thread-1') {
@@ -129,4 +170,16 @@ function historyThread() {
       items: [{ id: 'item-1', type: 'agentMessage', status: 'completed', text: 'answer' }],
     }],
   };
+}
+
+function threadUsage(totalTokens: number, lastTokens: number) {
+  const usage = (tokens: number) => ({
+    totalTokens: tokens,
+    inputTokens: tokens - 10,
+    cachedInputTokens: Math.max(0, tokens - 20),
+    cacheWriteInputTokens: 0,
+    outputTokens: 10,
+    reasoningOutputTokens: 0,
+  });
+  return { total: usage(totalTokens), last: usage(lastTokens), modelContextWindow: 200_000 };
 }

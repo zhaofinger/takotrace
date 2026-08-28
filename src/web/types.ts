@@ -10,8 +10,25 @@ export type TraceStatus =
   | "disconnected"
   | string;
 
+export interface TokenUsageBreakdown {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+}
+
+export interface ThreadTokenUsage {
+  total: TokenUsageBreakdown;
+  last: TokenUsageBreakdown;
+  modelContextWindow?: number;
+}
+
 export interface TraceEvent {
   seq: number;
+  startedSeq?: number;
+  completedSeq?: number;
   at: string;
   startedAt?: string;
   completedAt?: string;
@@ -35,6 +52,7 @@ export interface Turn {
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;
+  tokenUsage?: TokenUsageBreakdown;
   items: TraceEvent[];
 }
 
@@ -53,6 +71,7 @@ export interface Thread {
   historySource?: "app-server" | "rollout-file";
   createdAt: string;
   updatedAt: string;
+  tokenUsage?: ThreadTokenUsage;
   turns: CompactTurn[];
 }
 

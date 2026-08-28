@@ -39,11 +39,11 @@ describe('turnSummary', () => {
       turns: [],
     }));
 
-    expect(markup).toContain('Loading turns…');
-    expect(markup).not.toContain('No turns in this thread');
+    expect(markup).toContain('Loading runs…');
+    expect(markup).not.toContain('No runs in this session');
   });
 
-  it('renders a compact headerless row with icon-only status', () => {
+  it('renders a compact headerless row without a timestamp', () => {
     const markup = renderToStaticMarkup(createElement(Timeline, {
       onSelect: () => undefined,
       turns: [{
@@ -58,8 +58,11 @@ describe('turnSummary', () => {
 
     expect(markup).not.toContain('<thead');
     expect(markup).toContain('title="A long user prompt"');
-    expect(markup).toContain('vbg-visually-hidden">completed</span>');
-    expect(markup.indexOf('A long user prompt')).toBeLessThan(markup.indexOf('vbg-custom-event-row__time'));
+    expect(markup).toContain('vbg-custom-sr-only">completed</span>');
+    expect(markup).not.toContain('vbg-custom-status__icon');
+    expect(markup.match(/<td/g)).toHaveLength(1);
+    expect(markup).not.toContain('vbg-custom-event-row__time');
+    expect(markup).not.toContain('2026-01-01T08:30:00.000Z');
   });
 
   it('renders turn summaries as non-interactive inline Markdown', () => {
@@ -99,10 +102,79 @@ describe('turnSummary', () => {
     }));
 
     expect(markup).toContain('title="thread-full-id"');
-    expect(markup).toContain('aria-label="Copy thread ID"');
-    expect(markup).toContain('<main aria-label="Turns"');
-    expect(markup).not.toContain('<h2>Turns</h2>');
+    expect(markup).toContain('aria-label="Copy session ID"');
+    expect(markup).toContain('class="vbg-custom-thread-identity"');
+    expect(markup).toContain('<span>Session ID</span>');
+    expect(markup).toContain('class="vbg-custom-thread-copy"');
+    expect(markup).not.toContain('vbg-custom-thread-code');
+    expect(markup).toContain('<main aria-label="Runs"');
+    expect(markup).not.toContain('<h2>Runs</h2>');
     expect(markup).toContain('Rollout fallback');
+  });
+
+  it('shows total tokens and last-request context usage with exact values', () => {
+    const thread: Thread = {
+      id: 'thread-token-usage',
+      title: 'Token usage',
+      status: 'completed',
+      turnsLoaded: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      tokenUsage: {
+        total: {
+          inputTokens: 120_000,
+          cachedInputTokens: 80_000,
+          cacheWriteInputTokens: 0,
+          outputTokens: 8_500,
+          reasoningOutputTokens: 3_500,
+          totalTokens: 128_500,
+        },
+        last: {
+          inputTokens: 30_000,
+          cachedInputTokens: 20_000,
+          cacheWriteInputTokens: 0,
+          outputTokens: 2_000,
+          reasoningOutputTokens: 1_000,
+          totalTokens: 32_000,
+        },
+        modelContextWindow: 128_000,
+      },
+      turns: [],
+    };
+    const markup = renderToStaticMarkup(createElement(Timeline, {
+      onSelect: () => undefined,
+      thread,
+      turns: [],
+    }));
+
+    expect(markup).toContain('aria-label="Session token usage"');
+    expect(markup).toContain('<dt>Total tokens</dt>');
+    expect(markup).toContain('aria-label="128,500 total tokens"');
+    expect(markup).toContain('title="128,500 tokens">128.5K</dd>');
+    expect(markup).toContain('<dt>Context</dt>');
+    expect(markup).toContain('aria-label="32,000 of 128,000 context tokens, 25%"');
+    expect(markup).toContain('title="32,000 / 128,000 tokens (25%)"');
+    expect(markup).toContain('<strong>25%</strong>');
+    expect(markup).not.toContain('32K / 128K');
+  });
+
+  it('does not render a token summary without usage data', () => {
+    const thread: Thread = {
+      id: 'thread-no-usage',
+      title: 'No usage',
+      status: 'completed',
+      turnsLoaded: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      turns: [],
+    };
+    const markup = renderToStaticMarkup(createElement(Timeline, {
+      onSelect: () => undefined,
+      thread,
+      turns: [],
+    }));
+
+    expect(markup).not.toContain('aria-label="Session token usage"');
   });
 });
 

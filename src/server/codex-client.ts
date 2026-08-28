@@ -129,7 +129,8 @@ export class CodexClient {
       return this.request('thread/read', { threadId, includeTurns: false }, timeoutMs);
     }
     try {
-      return await this.request('thread/read', { threadId, includeTurns: true }, timeoutMs);
+      const response = await this.request('thread/read', { threadId, includeTurns: true }, timeoutMs);
+      return await this.mergeRolloutUsage(threadId, response);
     } catch (error) {
       if (this.isDeserializationOrCorruptError(error)) {
         try {
@@ -152,6 +153,41 @@ export class CodexClient {
         return this.request('thread/read', { threadId, includeTurns: false }, timeoutMs);
       }
       throw error;
+    }
+  }
+
+  private async mergeRolloutUsage(threadId: string, response: unknown): Promise<unknown> {
+    try {
+      const rollout = await readRolloutThread(threadId, { codexHome: this.options.codexHome });
+      if (!rollout) return response;
+      const result = record(response);
+      const thread = record(result.thread);
+      if (!Object.keys(thread).length) return response;
+      const rolloutThread = rollout.thread;
+      const usageByTurn = new Map((Array.isArray(rolloutThread.turns) ? rolloutThread.turns : []).flatMap((value) => {
+        const turn = record(value);
+        return typeof turn.id === 'string' && turn.tokenUsage !== undefined
+          ? [[turn.id, turn.tokenUsage] as const]
+          : [];
+      }));
+      const turns = Array.isArray(thread.turns)
+        ? thread.turns.map((value) => {
+          const turn = record(value);
+          const tokenUsage = typeof turn.id === 'string' ? usageByTurn.get(turn.id) : undefined;
+          return tokenUsage === undefined ? value : { ...turn, tokenUsage };
+        })
+        : thread.turns;
+      return {
+        ...result,
+        thread: {
+          ...thread,
+          ...(rolloutThread.tokenUsage === undefined ? {} : { tokenUsage: rolloutThread.tokenUsage }),
+          ...(turns === undefined ? {} : { turns }),
+        },
+      };
+    } catch (error) {
+      this.emitter.emit('stderr', `Warning: rollout usage merge failed for thread ${threadId}: ${error instanceof Error ? error.message : error}.\n`);
+      return response;
     }
   }
 

@@ -1,8 +1,27 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import type { CompactTurn, Turn } from "../types";
 import ExecutionReplay from "./ExecutionReplay";
+import { HighlightedCode } from "./HighlightedCode";
+import { Icon } from "./Icon";
 import { SequenceDiagram } from "./SequenceDiagram";
 import { StatusMark } from "./StatusMark";
+
+const compactTokenFormatter = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+const exactTokenFormatter = new Intl.NumberFormat("en-US");
+const tokenDetailMetrics = [
+  { key: "inputTokens", label: "Input", hideWhenZero: false },
+  { key: "cachedInputTokens", label: "Cached", hideWhenZero: false },
+  { key: "cacheWriteInputTokens", label: "Cache write", hideWhenZero: true },
+  { key: "outputTokens", label: "Output", hideWhenZero: false },
+  { key: "reasoningOutputTokens", label: "Reasoning", hideWhenZero: false },
+] as const;
+
+export function formatTokenCount(value: number): string {
+  return compactTokenFormatter.format(value);
+}
 
 function formatDate(value?: string): string {
   if (!value) return "—";
@@ -20,15 +39,17 @@ export function formatDuration(value?: number): string {
   return [hours && `${hours}h`, (hours || minutes) && `${minutes}m`, `${seconds}s`].filter(Boolean).join(" ");
 }
 
+function formatShortId(value: string): string {
+  return value.length > 9 ? `${value.slice(0, 8)}…` : value;
+}
+
 export function DetailPanel({
   error,
   isLoading = false,
-  threadId,
   turn,
 }: {
   error?: string;
   isLoading?: boolean;
-  threadId?: string;
   turn?: CompactTurn | Turn;
 }) {
   const [tab, setTab] = useState<"trace" | "sequence" | "json">("trace");
@@ -48,7 +69,7 @@ export function DetailPanel({
   };
 
   return (
-    <aside className="vbg-custom-detail" aria-label="Turn detail">
+    <aside className="vbg-custom-detail" aria-label="Run detail">
       <div className="vbg-custom-detail__tabs" role="tablist">
         <button
           aria-controls="turn-trace-panel"
@@ -91,15 +112,15 @@ export function DetailPanel({
         </button>
       </div>
       {tab === "json" ? (
-        <pre
+        <HighlightedCode
           aria-labelledby="turn-json-tab"
           className="vbg-custom-raw-json"
+          code={raw}
           id="turn-json-panel"
+          language="json"
           role="tabpanel"
           tabIndex={0}
-        >
-          {raw}
-        </pre>
+        />
       ) : (
         <div
           aria-busy={isLoading}
@@ -113,38 +134,61 @@ export function DetailPanel({
             <p aria-live="polite" className="vbg-custom-detail-state vbg-custom-detail-state--error">{error}</p>
           )}
           {isLoading && turn && (
-            <span aria-live="polite" className="vbg-custom-sr-only" role="status">Loading full turn detail…</span>
+            <span aria-live="polite" className="vbg-custom-sr-only" role="status">Loading full run detail…</span>
           )}
           {!turn ? isLoading ? (
             <div aria-live="polite" className="vbg-custom-loading-state" role="status">
               <span aria-hidden="true" className="vbg-custom-spinner" />
-              <strong>Loading thread…</strong>
-              <span>Turns and conversation details will appear here.</span>
+              <strong>Loading session…</strong>
+              <span>Runs and execution details will appear here.</span>
             </div>
           ) : (
-            <div className="vbg-custom-detail-empty"><strong>No turn selected</strong><span>Select a turn to inspect all of its items.</span></div>
+            <div className="vbg-custom-detail-empty"><strong>No run selected</strong><span>Select a run to inspect all of its steps.</span></div>
           ) : (
             <>
-              <dl className="vbg-custom-turn-meta-line">
-                <div>
-                  <dt>Ended</dt>
-                  <dd title={formatDate(turn.completedAt)}>{formatDate(turn.completedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Thread</dt>
-                  <dd title={threadId}><code>{threadId || "—"}</code></dd>
-                </div>
-                <div>
-                  <dt>Turn</dt>
-                  <dd title={turn.id}><code>{turn.id}</code></dd>
-                </div>
-              </dl>
-              <dl className="vbg-custom-turn-overview">
-                <div><dt>Status</dt><dd><StatusMark status={turn.status} /></dd></div>
-                <div><dt>Started</dt><dd>{formatDate(turn.startedAt)}</dd></div>
-                <div><dt>Duration</dt><dd title={turn.durationMs === undefined ? undefined : `${turn.durationMs}ms`}>{formatDuration(turn.durationMs)}</dd></div>
-                <div><dt>Items</dt><dd>{"itemCount" in turn ? turn.itemCount : turn.items.length}</dd></div>
-              </dl>
+              <div className="vbg-custom-turn-summary">
+                <dl className="vbg-custom-turn-overview">
+                  <div><dt>Status</dt><dd><StatusMark status={turn.status} /></dd></div>
+                  <div><dt>Started</dt><dd>{formatDate(turn.startedAt)}</dd></div>
+                  <div><dt>Duration</dt><dd title={turn.durationMs === undefined ? undefined : `${turn.durationMs}ms`}>{formatDuration(turn.durationMs)}</dd></div>
+                  <div><dt>Steps</dt><dd>{"itemCount" in turn ? turn.itemCount : turn.items.length}</dd></div>
+                  <div className="vbg-custom-turn-overview__identity">
+                    <dt>Run</dt>
+                    <dd aria-label={`Run ${turn.id}`} title={turn.id}><code>{formatShortId(turn.id)}</code></dd>
+                  </div>
+                </dl>
+                {turn.tokenUsage && (
+                  <section aria-labelledby="turn-token-usage-heading" className="vbg-custom-turn-token-usage">
+                    <details>
+                      <summary>
+                        <span aria-hidden="true" className="vbg-custom-turn-token-usage__disclosure"><Icon name="chevron" /></span>
+                        <span id="turn-token-usage-heading">Token usage</span>
+                        <strong
+                          aria-label={`${exactTokenFormatter.format(turn.tokenUsage.totalTokens)} total tokens`}
+                          title={`${exactTokenFormatter.format(turn.tokenUsage.totalTokens)} tokens`}
+                        >
+                          {formatTokenCount(turn.tokenUsage.totalTokens)}
+                        </strong>
+                      </summary>
+                      <dl>
+                        {tokenDetailMetrics.map(({ key, label, hideWhenZero }) => {
+                          const value = turn.tokenUsage?.[key] ?? 0;
+                          if (hideWhenZero && value === 0) return null;
+                          const exactValue = exactTokenFormatter.format(value);
+                          return (
+                            <div key={key}>
+                              <dt>{label}</dt>
+                              <dd aria-label={`${exactValue} ${label.toLowerCase()} tokens`} title={`${exactValue} tokens`}>
+                                {formatTokenCount(value)}
+                              </dd>
+                            </div>
+                          );
+                        })}
+                      </dl>
+                    </details>
+                  </section>
+                )}
+              </div>
               {tab === "trace" ? <ExecutionReplay items={turn.items} /> : <SequenceDiagram items={turn.items} />}
             </>
           )}

@@ -53,6 +53,7 @@ describe("sequence-diagram-model", () => {
     expect(Object.values(SEQUENCE_PARTICIPANTS).map((participant) => participant.iconName)).toEqual([
       "user",
       "agent",
+      "code",
       "terminal",
       "network",
       "subagent",
@@ -107,6 +108,28 @@ describe("sequence-diagram-model", () => {
     expect(mermaid).toContain("agent-->>user:");
   });
 
+  it("renders lifecycle overlap as a parallel sequence region and Mermaid par block", () => {
+    const items = [
+      lifecycleEvent(1, "item/started", "first", "running"),
+      lifecycleEvent(2, "item/started", "second", "running"),
+      lifecycleEvent(3, "item/completed", "second", "completed"),
+      lifecycleEvent(4, "item/completed", "first", "completed"),
+    ];
+    const model = buildSequenceDiagramModel(items);
+
+    expect(model.parallelGroups).toEqual([
+      expect.objectContaining({
+        stepIds: ["seq-item-first", "seq-item-second"],
+        maxConcurrency: 2,
+        evidence: "lifecycle",
+        label: "Parallel ×2",
+      }),
+    ]);
+    expect(exportMermaidSequence(model)).toContain("par Parallel ×2");
+    expect(exportMermaidSequence(model)).toContain("and Shell · second");
+    expect(exportMermaidSequence(model)).toContain("  end");
+  });
+
   it("keeps failed executions directed from the agent to the target lane", () => {
     const model = buildSequenceDiagramModel([
       createEvent("commandExecution", { command: "npm run build" }, { status: "failed" }),
@@ -118,7 +141,47 @@ describe("sequence-diagram-model", () => {
       type: "call",
       status: "failed",
     });
-    expect(exportMermaidSequence(model)).toContain("agent->>+tool: npm run build");
+    expect(exportMermaidSequence(model)).toContain("agent->>+tool: Shell · npm run build");
+  });
+
+  it("uses the MCP server name for the sequence endpoint label", () => {
+    const named = buildSequenceDiagramModel([
+      createEvent("mcpToolCall", { server: "node_repl", tool: "js" }),
+    ]);
+    const unnamed = buildSequenceDiagramModel([
+      createEvent("mcpToolCall", { tool: "js" }),
+    ]);
+
+    expect(named.steps[0]).toMatchObject({
+      from: "agent",
+      to: "mcp",
+      toLabel: "node_repl",
+      displayTitle: "JavaScript",
+    });
+    expect(unnamed.steps[0]).toMatchObject({
+      from: "agent",
+      to: "mcp",
+    });
+    expect(unnamed.steps[0].toLabel).toBeUndefined();
+  });
+
+  it("renders inferred SKILL.md reads in the Skills lane", () => {
+    const model = buildSequenceDiagramModel([
+      createEvent("commandExecution", {
+        command: ["/bin/zsh", "-lc", "cat /Users/bytedance/.agents/skills/read/SKILL.md"],
+        parsed_cmd: [{ type: "read", path: "/Users/bytedance/.agents/skills/read/SKILL.md" }],
+      }),
+    ]);
+
+    expect(model.steps[0]).toMatchObject({
+      from: "agent",
+      to: "skill",
+      displayTitle: "Skill load · read (inferred)",
+      detailTitle: "Skill load · read (inferred)",
+      isCommand: false,
+    });
+    expect(model.participants.map((participant) => participant.key)).toEqual(["user", "agent", "skill"]);
+    expect(exportMermaidSequence(model)).toContain("agent->>+skill: Skill load · read (inferred)");
   });
 
   it("shows the subagent collaboration as outbound calls and inbound updates", () => {
@@ -194,10 +257,10 @@ describe("sequence-diagram-model", () => {
       createEvent("commandExecution", { command }),
     ]);
 
-    expect(model.steps[0].displayTitle).toBe("rg -n sequence src/web");
-    expect(model.steps[0].detailTitle).toBe("rg -n sequence src/web");
+    expect(model.steps[0].displayTitle).toBe("Shell · rg -n sequence src/web");
+    expect(model.steps[0].detailTitle).toBe("Shell · rg -n sequence src/web");
     expect(model.steps[0].detail).toBe(command);
-    expect(exportMermaidSequence(model)).toContain("agent->>+tool: rg -n sequence src/web");
+    expect(exportMermaidSequence(model)).toContain("agent->>+tool: Shell · rg -n sequence src/web");
     expect(exportMermaidSequence(model)).not.toContain("/bin/zsh -lc");
   });
 
@@ -207,9 +270,9 @@ describe("sequence-diagram-model", () => {
       createEvent("commandExecution", { command }),
     ]);
 
-    expect(model.steps[0].displayTitle).toBe("cat …/polish.md");
+    expect(model.steps[0].displayTitle).toBe("Shell · cat …/polish.md");
     expect(model.steps[0].detailTitle)
-      .toBe("cat /Users/bytedance/.agents/skills/impeccable/reference/polish.md");
+      .toBe("Shell · cat /Users/bytedance/.agents/skills/impeccable/reference/polish.md");
     expect(model.steps[0].detail).toBe(command);
   });
 
@@ -222,3 +285,18 @@ describe("sequence-diagram-model", () => {
     )).toBe("sed -n 1p ~/workspace/thread-scope-old/file.ts");
   });
 });
+
+function lifecycleEvent(
+  seq: number,
+  method: string,
+  itemId: string,
+  status: FlowEvent["status"],
+): FlowEvent {
+  return createEvent("commandExecution", { command: itemId }, {
+    seq,
+    at: "2026-01-01T00:00:00.000Z",
+    method,
+    itemId,
+    status,
+  });
+}

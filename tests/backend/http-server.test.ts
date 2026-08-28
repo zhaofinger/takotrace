@@ -151,7 +151,7 @@ describe('ThreadScopeServer', () => {
     const unavailableAddress = await unavailable.listen();
     const unavailableResponse = await fetch(`http://${unavailableAddress.host}:${unavailableAddress.port}/api/subagents/child`);
     expect(unavailableResponse.status).toBe(501);
-    expect(await unavailableResponse.json()).toEqual({ error: { message: 'Subagent thread details are unavailable' } });
+    expect(await unavailableResponse.json()).toEqual({ error: { message: 'Subagent session details are unavailable' } });
 
     const missing = new ThreadScopeServer({
       startThread: async () => ({}), resumeThread: async () => ({}), startTurn: async () => ({}),
@@ -161,7 +161,7 @@ describe('ThreadScopeServer', () => {
     const missingAddress = await missing.listen();
     const missingResponse = await fetch(`http://${missingAddress.host}:${missingAddress.port}/api/subagents/child`);
     expect(missingResponse.status).toBe(404);
-    expect(await missingResponse.json()).toEqual({ error: { message: 'Subagent thread not found' } });
+    expect(await missingResponse.json()).toEqual({ error: { message: 'Subagent session not found' } });
   });
 
   it('serves compact state and a bounded full turn detail', async () => {
@@ -200,7 +200,7 @@ describe('ThreadScopeServer', () => {
 
     const missing = await fetch(`${base}/api/threads/thread%20space/turns/missing`);
     expect(missing.status).toBe(404);
-    expect(await missing.json()).toEqual({ error: { message: 'Turn not found' } });
+    expect(await missing.json()).toEqual({ error: { message: 'Run not found' } });
   });
 
   it('serves only supported images from the configured visualization directory', async () => {

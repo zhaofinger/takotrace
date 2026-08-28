@@ -1,5 +1,8 @@
+import { Children, isValidElement, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { HighlightedCode } from "./HighlightedCode";
+import { PreviewableImage } from "./PreviewableImage";
 
 const components: Components = {
   a: ({ children, href, ...props }) => {
@@ -10,7 +13,7 @@ const components: Components = {
   },
   img: ({ alt, src }) => {
     if (src?.includes("/.codex/visualizations/")) {
-      return <img alt={alt ?? ""} loading="lazy" src={`/api/visualization?path=${encodeURIComponent(src)}`} />;
+      return <PreviewableImage alt={alt ?? ""} src={`/api/visualization?path=${encodeURIComponent(src)}`} />;
     }
 
     if (src?.startsWith("/")) {
@@ -22,9 +25,21 @@ const components: Components = {
       );
     }
 
-    return <img alt={alt ?? ""} loading="lazy" src={src} />;
+    return <PreviewableImage alt={alt ?? ""} src={src} />;
+  },
+  pre: ({ children }) => {
+    const child = Children.toArray(children)[0];
+    if (!isValidElement<{ children?: ReactNode; className?: string }>(child)) return <pre>{children}</pre>;
+    const language = /(?:^|\s)language-([^\s]+)/.exec(child.props.className ?? "")?.[1];
+    const code = nodeText(child.props.children).replace(/\n$/, "");
+    return <HighlightedCode className="vbg-custom-markdown-code" code={code} language={language} />;
   },
 };
+
+function nodeText(value: ReactNode): string {
+  if (Array.isArray(value)) return value.map(nodeText).join("");
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
 
 function hexEncode(value: string): string {
   return Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, "0")).join("");

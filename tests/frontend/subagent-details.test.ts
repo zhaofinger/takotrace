@@ -93,8 +93,8 @@ describe("loaded subagent thread", () => {
     expect(markup).toContain("Builder");
     expect(markup).toContain("frontend_impl");
     expect(markup).toContain("worker");
-    expect(markup).toContain("Turns</dt><dd>1");
-    expect(markup).toContain("Items</dt><dd>7");
+    expect(markup).toContain("Runs</dt><dd>1");
+    expect(markup).toContain("Steps</dt><dd>7");
     expect(markup).toContain("Prompt</span>");
     expect(markup).toContain("Commentary</span>");
     expect(markup).toContain("Final</span>");

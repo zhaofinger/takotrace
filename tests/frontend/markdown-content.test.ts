@@ -29,6 +29,20 @@ describe("MarkdownContent", () => {
     expect(markup).toContain('target="_blank"');
   });
 
+  it("highlights fenced code while leaving inline code inline", () => {
+    const markup = renderToStaticMarkup(createElement(
+      MarkdownContent,
+      null,
+      ["Use `const` inline.", "", "```ts", "const answer: number = 42;", "```"].join("\n"),
+    ));
+
+    expect(markup).toContain("Use <code>const</code> inline.");
+    expect(markup).toContain('class="vbg-custom-code-block vbg-custom-markdown-code"');
+    expect(markup).toContain('data-language="typescript"');
+    expect(markup).toContain("hljs-keyword");
+    expect(markup).not.toContain("<pre><pre");
+  });
+
   it("routes absolute local file links through the controlled viewer", () => {
     const markup = renderToStaticMarkup(createElement(
       MarkdownContent,
@@ -69,6 +83,9 @@ describe("MarkdownContent", () => {
       "![Preview](/Users/example/.codex/visualizations/thread/preview.png)",
     ));
 
+    expect(remote).toContain('aria-haspopup="dialog"');
+    expect(remote).toContain('aria-label="Enlarge Preview"');
+    expect(remote).toContain('class="vbg-custom-image-thumbnail"');
     expect(remote).toContain('<img alt="Preview" loading="lazy" src="https://example.com/preview.png"');
     expect(local).not.toContain("<img");
     expect(local).toContain("vbg-custom-markdown__local-image");
@@ -106,6 +123,8 @@ describe("MarkdownContent", () => {
     expect(markup).toContain('alt="prompt.png"');
     expect(markup).toContain('src="/api/attachments/thread%20space/turn%20space/item%20space/2"');
     expect(markup).toContain('alt="reference.png"');
-    expect(markup).toContain('target="_blank"');
+    expect(markup).toContain('aria-label="Enlarge prompt.png"');
+    expect(markup).toContain('aria-label="Enlarge reference.png"');
+    expect(markup).not.toContain('target="_blank"');
   });
 });

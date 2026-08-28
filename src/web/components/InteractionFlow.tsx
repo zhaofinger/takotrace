@@ -3,6 +3,9 @@ import type { CompactTraceEvent, TraceEvent } from "../types";
 import { EventDetails } from "./EventDetails";
 import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
+import { commandText, workingDirectoryText } from "./command-display";
+import { nodeReplExecution } from "./mcp-execution";
+import { inferredSkillLoad } from "./skill-display";
 import { StatusMark } from "./StatusMark";
 
 export type FlowEvent = CompactTraceEvent | TraceEvent;
@@ -22,6 +25,7 @@ export interface FlowNode {
   kind: FlowKind;
   label: string;
   title: string;
+  participantName?: string;
   detail: string;
   meta?: string;
   showStatus?: boolean;
@@ -88,13 +92,18 @@ function jsonPreview(value: unknown): string | undefined {
 }
 
 function fileChanges(raw: Record<string, unknown>): string | undefined {
-  if (!Array.isArray(raw.changes)) return undefined;
-  const changes = raw.changes.map((entry) => {
-    const change = record(entry);
-    const kind = text(record(change.kind).type) ?? text(change.kind) ?? "changed";
-    const path = text(change.path);
-    return path ? `${kind} · ${path}` : undefined;
-  }).filter(Boolean);
+  const changes = Array.isArray(raw.changes)
+    ? raw.changes.map((entry) => {
+      const change = record(entry);
+      const kind = text(record(change.kind).type) ?? text(change.kind) ?? text(change.type) ?? "changed";
+      const path = text(change.path);
+      return path ? `${kind} · ${path}` : undefined;
+    })
+    : Object.entries(record(raw.changes)).map(([path, value]) => {
+      const change = record(value);
+      const kind = text(change.type) ?? text(record(change.kind).type) ?? text(change.kind) ?? "changed";
+      return `${kind} · ${path}`;
+    });
   return changes.join("\n") || undefined;
 }
 
@@ -189,18 +198,30 @@ export function flowNode(event: FlowEvent): FlowNode {
   }
   if (type === "commandexecution") {
     const exitCode = typeof raw.exitCode === "number" ? `exit ${raw.exitCode}` : undefined;
-    const command = text(raw.command);
-    const title = command ? command.split("\n", 1)[0].slice(0, 120) : "Command";
-    return { kind: "tool", label: "Tool", title, detail: command ?? fallback, meta: [text(raw.cwd), exitCode].filter(Boolean).join(" · ") || undefined, showStatus: true };
+    const command = commandText(raw.command);
+    const skillLoad = inferredSkillLoad(raw);
+    if (skillLoad) {
+      return {
+        kind: "skill",
+        label: "Skill",
+        title: skillLoad.displayTitle,
+        detail: command ?? fallback,
+        meta: [workingDirectoryText(raw.cwd), exitCode].filter(Boolean).join(" · ") || undefined,
+        showStatus: true,
+      };
+    }
+    const title = command ? `Shell · ${command.split("\n", 1)[0].slice(0, 112)}` : "Shell";
+    return { kind: "tool", label: "Tool", title, detail: command ?? fallback, meta: [workingDirectoryText(raw.cwd), exitCode].filter(Boolean).join(" · ") || undefined, showStatus: true };
   }
   if (type.includes("skill")) {
     const name = text(raw.name) ?? text(raw.skill) ?? event.summary ?? "Skill";
-    return { kind: "skill", label: "Skill", title: name, detail: text(raw.prompt) ?? text(raw.path) ?? fallback, showStatus: true };
+    return { kind: "skill", label: "Skill", title: `Skill · ${name}`, detail: text(raw.prompt) ?? text(raw.path) ?? fallback, showStatus: true };
   }
   if (type === "mcptoolcall") {
     const server = text(raw.server);
     const tool = text(raw.tool) ?? event.summary ?? "MCP tool";
-    return { kind: "mcp", label: "MCP", title: [server, tool].filter(Boolean).join(" · "), detail: jsonPreview(raw.arguments) ?? fallback, showStatus: true };
+    const execution = nodeReplExecution(raw);
+    return { kind: "mcp", label: "MCP", title: execution?.displayTitle ?? [server, tool].filter(Boolean).join(" · "), participantName: server, detail: jsonPreview(raw.arguments) ?? fallback, showStatus: true };
   }
   if (type === "filechange") {
     return { kind: "file", label: "Tool", title: "File change", detail: fileChanges(raw) ?? fallback, showStatus: true };
@@ -217,12 +238,18 @@ export function flowNode(event: FlowEvent): FlowNode {
 export function mergeFlowEvents(items: FlowEvent[]): FlowEvent[] {
   const merged = new Map<string, FlowEvent>();
   for (const input of items) {
+    const isStarted = input.method.includes("started");
+    const isCompleted = input.method.includes("completed") || input.method.includes("failed");
     const event: FlowEvent = {
       ...input,
-      startedAt: input.startedAt ?? (input.method.includes("started") ? input.at : undefined),
-      completedAt: input.completedAt ?? (input.method.includes("completed") || input.method.includes("failed") ? input.at : undefined),
+      startedSeq: input.startedSeq ?? (isStarted ? input.seq : undefined),
+      completedSeq: input.completedSeq ?? (isCompleted ? input.seq : undefined),
+      startedAt: input.startedAt ?? (isStarted ? input.at : undefined),
+      completedAt: input.completedAt ?? (isCompleted ? input.at : undefined),
     };
-    const key = event.itemId ? `item:${event.itemId}` : `event:${event.seq}`;
+    const key = event.itemId
+      ? `item:${event.threadId}:${event.turnId ?? ""}:${event.itemId}`
+      : `event:${event.threadId}:${event.turnId ?? ""}:${event.seq}`;
     const previous = merged.get(key);
     if (!previous) {
       merged.set(key, event);
@@ -237,6 +264,8 @@ export function mergeFlowEvents(items: FlowEvent[]): FlowEvent[] {
       ...primary,
       seq: Math.min(previous.seq, event.seq),
       at: previous.at < event.at ? previous.at : event.at,
+      startedSeq: previous.startedSeq ?? event.startedSeq,
+      completedSeq: event.completedSeq ?? previous.completedSeq,
       startedAt: previous.startedAt ?? event.startedAt,
       completedAt: event.completedAt ?? previous.completedAt,
       parentItemId: event.parentItemId ?? previous.parentItemId,

@@ -1,5 +1,9 @@
 import type { CompactTraceEvent, TraceEvent } from "../types";
+import { commandText, workingDirectoryText } from "./command-display";
+import { HighlightedCode, languageForPath } from "./HighlightedCode";
 import { MarkdownContent } from "./MarkdownContent";
+import { nodeReplExecution } from "./mcp-execution";
+import { PreviewableImage } from "./PreviewableImage";
 import { SubagentThreadDetails } from "./SubagentThreadDetails";
 
 type DetailEvent = CompactTraceEvent | TraceEvent;
@@ -52,19 +56,19 @@ function FieldList({ fields }: { fields: Array<[string, unknown]> }) {
   ) : null;
 }
 
-function CodeBlock({ children }: { children: string }) {
-  return <pre className="vbg-custom-event-code"><code>{children}</code></pre>;
+function CodeBlock({ children, language, sourceLanguage }: { children: string; language?: string; sourceLanguage?: string }) {
+  return <HighlightedCode className="vbg-custom-event-code" code={children} language={language} sourceLanguage={sourceLanguage} />;
 }
 
 function CommandDetails({ raw }: { raw: RecordValue }) {
-  const command = text(raw.command);
+  const command = commandText(raw.command);
   const output = text(raw.aggregatedOutput);
   const actions = Array.isArray(raw.commandActions) ? raw.commandActions.map(record) : [];
 
   return (
     <div className="vbg-custom-event-detail">
-      {command && <CodeBlock>{command}</CodeBlock>}
-      <FieldList fields={[["Working directory", raw.cwd], ["Process", raw.processId], ["Exit code", raw.exitCode]]} />
+      {command && <CodeBlock language="bash">{command}</CodeBlock>}
+      <FieldList fields={[["Working directory", workingDirectoryText(raw.cwd)], ["Process", raw.processId], ["Exit code", raw.exitCode]]} />
       {actions.length > 0 && (
         <div className="vbg-custom-event-actions" aria-label="Command actions">
           {actions.map((action, index) => {
@@ -86,17 +90,21 @@ function McpDetails({ raw }: { raw: RecordValue }) {
   const result = record(raw.result);
   const content = Array.isArray(result.content) ? result.content.map(record) : [];
   const error = text(raw.error);
+  const execution = nodeReplExecution(raw);
+  const executionLabel = execution
+    ? `${execution.label}${execution.source === "code" ? " (inferred)" : ""}`
+    : undefined;
   const remainingArgs = Object.fromEntries(Object.entries(args).filter(([key]) => !["code", "function", "title"].includes(key)));
 
   return (
     <div className="vbg-custom-event-detail">
       {title && <p className="vbg-custom-event-lede">{title}</p>}
-      <FieldList fields={[["Server", raw.server], ["Tool", raw.tool], ["Plugin", raw.pluginId], ["Read only", raw.readOnlyHint]]} />
-      {code && <CodeBlock>{preview(code)}</CodeBlock>}
+      <FieldList fields={[["Execution", executionLabel], ["Server", raw.server], ["Tool", raw.tool], ["Plugin", raw.pluginId], ["Read only", raw.readOnlyHint]]} />
+      {code && <CodeBlock language={execution ? "javascript" : text(args.language)}>{preview(code)}</CodeBlock>}
       {Object.keys(remainingArgs).length > 0 && (
         <details className="vbg-custom-event-disclosure">
           <summary>Arguments · {Object.keys(remainingArgs).length} fields</summary>
-          <CodeBlock>{preview(json(remainingArgs))}</CodeBlock>
+          <CodeBlock language="json">{preview(json(remainingArgs))}</CodeBlock>
         </details>
       )}
       {error && <p className="vbg-custom-event-error" role="alert">{error}</p>}
@@ -107,7 +115,7 @@ function McpDetails({ raw }: { raw: RecordValue }) {
             {content.map((block, index) => {
               if (block.type === "text") return <CodeBlock key={index}>{preview(text(block.text) ?? "")}</CodeBlock>;
               if (block.type === "image") return <p key={index}>Image result · {String(block.mimeType ?? "unknown type")}</p>;
-              return <CodeBlock key={index}>{preview(json(block))}</CodeBlock>;
+              return <CodeBlock key={index} language="json">{preview(json(block))}</CodeBlock>;
             })}
           </div>
         </details>
@@ -116,13 +124,52 @@ function McpDetails({ raw }: { raw: RecordValue }) {
   );
 }
 
-function FileChangeDetails({ raw }: { raw: RecordValue }) {
-  const changes = Array.isArray(raw.changes) ? raw.changes.map(record) : [];
+interface FileChangeEntry {
+  diff?: string;
+  kind: string;
+  movePath?: string;
+  path: string;
+}
+
+function fileChangeEntries(raw: RecordValue): FileChangeEntry[] {
+  const changes = raw.changes;
+  if (Array.isArray(changes)) {
+    return changes.map(record).map((change) => ({
+      diff: text(change.unifiedDiff) ?? text(change.unified_diff) ?? text(change.diff),
+      kind: text(record(change.kind).type) ?? text(change.kind) ?? text(change.type) ?? "change",
+      movePath: text(change.movePath) ?? text(change.move_path),
+      path: text(change.path) ?? "Unknown file",
+    }));
+  }
+
+  return Object.entries(record(changes)).map(([path, value]) => {
+    const change = record(value);
+    return {
+      diff: text(change.unifiedDiff) ?? text(change.unified_diff) ?? text(change.diff),
+      kind: text(change.type) ?? text(record(change.kind).type) ?? text(change.kind) ?? "change",
+      movePath: text(change.movePath) ?? text(change.move_path),
+      path,
+    };
+  });
+}
+
+function FileChangeDetails({ fallback, raw }: { fallback: string; raw: RecordValue }) {
+  const changes = fileChangeEntries(raw);
+  if (!changes.length) return <MarkdownContent>{fallback}</MarkdownContent>;
+
   return (
     <ul className="vbg-custom-file-changes">
       {changes.map((change, index) => {
-        const kind = text(record(change.kind).type) ?? text(change.kind) ?? "change";
-        return <li key={`${String(change.path)}-${index}`}><strong>{kind}</strong><code>{String(change.path ?? "Unknown file")}</code></li>;
+        return (
+          <li key={`${change.path}-${index}`}>
+            <div className="vbg-custom-file-change__heading">
+              <strong>{change.kind}</strong>
+              <code title={change.path}>{change.path}</code>
+            </div>
+            {change.movePath && <p>Moved to <code title={change.movePath}>{change.movePath}</code></p>}
+            {change.diff && <CodeBlock language="diff" sourceLanguage={languageForPath(change.path)}>{preview(change.diff, 12_000)}</CodeBlock>}
+          </li>
+        );
       })}
     </ul>
   );
@@ -156,7 +203,7 @@ function SubagentDetails({ raw }: { raw: RecordValue }) {
       <FieldList fields={[
         ["Action", raw.tool ?? raw.kind],
         ["Agent", raw.agentPath],
-        ["Thread", raw.agentThreadId],
+        ["Session", raw.agentThreadId],
         ["Targets", receivers],
         ["Model", raw.model],
         ["Reasoning", raw.reasoningEffort],
@@ -186,9 +233,7 @@ function UserMessageDetails({ event, fallback, raw }: { event: DetailEvent; fall
             const source = `/api/attachments/${encodeURIComponent(event.threadId)}/${encodeURIComponent(event.turnId!)}/${encodeURIComponent(event.itemId!)}/${image.index}`;
             const label = image.path.split("/").pop() ?? "User attachment";
             return (
-              <a href={source} key={`${image.index}-${image.path}`} rel="noreferrer" target="_blank" title={`Open ${label}`}>
-                <img alt={label} loading="lazy" src={source} />
-              </a>
+              <PreviewableImage alt={label} key={`${image.index}-${image.path}`} src={source} />
             );
           })}
         </div>
@@ -204,7 +249,7 @@ export function EventDetails({ event, fallback }: { event: DetailEvent; fallback
   if (type === "usermessage") return <UserMessageDetails event={event} fallback={fallback} raw={raw} />;
   if (type === "commandexecution") return <CommandDetails raw={raw} />;
   if (type === "mcptoolcall") return <McpDetails raw={raw} />;
-  if (type === "filechange") return <FileChangeDetails raw={raw} />;
+  if (type === "filechange") return <FileChangeDetails fallback={fallback} raw={raw} />;
   if (type.includes("websearch")) return <WebSearchDetails raw={raw} />;
   if (type === "subagentactivity" || type === "collabagenttoolcall") return <SubagentDetails raw={raw} />;
   if (type === "imageview") return <FieldList fields={[["Image", raw.path]]} />;

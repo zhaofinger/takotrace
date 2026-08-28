@@ -78,6 +78,49 @@ describe('CodexClient history sync', () => {
     }
   });
 
+  it('best-effort merges rollout token usage into a successful thread/read response', async () => {
+    const threadId = '01a03900-5582-7a11-bd8d-a594d4ed8c91';
+    const turnId = '01a03900-f4e5-7c61-895b-e5b5dd692d83';
+    const codexHome = await mkdtemp(join(tmpdir(), 'thread-scope-client-'));
+    try {
+      const directory = join(codexHome, 'sessions', '2026', '08', '25');
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${threadId}.jsonl`), [
+        JSON.stringify({ timestamp: '2026-08-25T12:58:38.000Z', type: 'session_meta', payload: { id: threadId } }),
+        JSON.stringify({ timestamp: '2026-08-25T12:58:39.000Z', type: 'turn_context', payload: { turn_id: turnId } }),
+        JSON.stringify({
+          timestamp: '2026-08-25T12:58:40.000Z', type: 'event_msg', payload: {
+            type: 'token_count', info: {
+              total_token_usage: snakeUsage(100), last_token_usage: snakeUsage(100), model_context_window: 200_000,
+            },
+          },
+        }),
+      ].join('\n'));
+      const client = new CodexClient({ codexHome });
+      vi.spyOn(client, 'request').mockResolvedValue({
+        thread: {
+          ...thread(threadId, 20), historySource: 'app-server',
+          turns: [{ id: turnId, status: 'completed', items: [{ id: 'app-item' }] }],
+        },
+      });
+
+      const result = await client.readThread(threadId, true) as {
+        thread: {
+          historySource: string;
+          tokenUsage: { total: { totalTokens: number } };
+          turns: Array<{ tokenUsage: { totalTokens: number }; items: unknown[] }>;
+        };
+      };
+
+      expect(result.thread.historySource).toBe('app-server');
+      expect(result.thread.tokenUsage.total.totalTokens).toBe(100);
+      expect(result.thread.turns[0].tokenUsage.totalTokens).toBe(100);
+      expect(result.thread.turns[0].items).toEqual([{ id: 'app-item' }]);
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
   it("handles fatal syncThread errors gracefully without rejecting", async () => {
     const client = new CodexClient();
     vi.spyOn(client, "readThread").mockRejectedValue(new Error("Network unrecoverable"));
@@ -92,4 +135,15 @@ describe('CodexClient history sync', () => {
 
 function thread(id: string, updatedAt: number) {
   return { id, name: id, preview: id, createdAt: updatedAt - 1, updatedAt, status: { type: 'notLoaded' }, turns: [] };
+}
+
+function snakeUsage(totalTokens: number) {
+  return {
+    total_tokens: totalTokens,
+    input_tokens: totalTokens - 10,
+    cached_input_tokens: totalTokens - 20,
+    cache_write_input_tokens: 0,
+    output_tokens: 10,
+    reasoning_output_tokens: 0,
+  };
 }

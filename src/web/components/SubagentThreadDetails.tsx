@@ -89,8 +89,8 @@ export function SubagentThreadContent({
         {thread.agentPath && <div><dt>Path</dt><dd><code>{thread.agentPath}</code></dd></div>}
         {thread.modelProvider && <div><dt>Provider</dt><dd>{thread.modelProvider}</dd></div>}
         {thread.depth !== undefined && <div><dt>Depth</dt><dd>{thread.depth}</dd></div>}
-        <div><dt>Turns</dt><dd>{thread.turns.length}</dd></div>
-        <div><dt>Items</dt><dd>{itemCount}</dd></div>
+        <div><dt>Runs</dt><dd>{thread.turns.length}</dd></div>
+        <div><dt>Steps</dt><dd>{itemCount}</dd></div>
       </dl>
       {items.length > 0 ? (
         <ol className="vbg-custom-subagent-events">
@@ -183,7 +183,7 @@ export function SubagentThreadDetails({
   const threadIds = subagentTargetThreadIds(raw);
   if (threadIds.length === 0) return null;
   return (
-    <div className="vbg-custom-subagent-targets" aria-label="Subagent thread details">
+    <div className="vbg-custom-subagent-targets" aria-label="Subagent session details">
       {threadIds.map((threadId) => (
         <TargetThread key={threadId} renderEventDetails={renderEventDetails} threadId={threadId} />
       ))}

@@ -1,7 +1,8 @@
-import type { ConnectionState } from "../types";
+import type { ConnectionState, Thread } from "../types";
 import type { ThemePreference } from "../theme";
 import { nextThemePreference } from "../theme";
 import { Icon } from "./Icon";
+import { GlobalSearch } from "./GlobalSearch";
 import { StatusMark } from "./StatusMark";
 
 const THEME_LABELS: Record<ThemePreference, string> = {
@@ -12,26 +13,44 @@ const THEME_LABELS: Record<ThemePreference, string> = {
 
 export function Header({
   connection,
+  onSelectThread,
+  onSelectTurn,
   onThemeChange,
   theme,
+  threads,
 }: {
   connection: ConnectionState;
+  onSelectThread: (threadId: string) => void;
+  onSelectTurn: (threadId: string, turnId: string) => void;
   onThemeChange: () => void;
   theme: ThemePreference;
+  threads: Thread[];
 }) {
   const isConnected = connection.status.toLowerCase() === "connected";
+  const connectionLabel = isConnected
+    ? "Connected"
+    : `${connection.status.charAt(0).toUpperCase()}${connection.status.slice(1)}`;
   const nextTheme = nextThemePreference(theme);
 
   return (
     <header className="vbg-custom-topbar">
       <h1>ThreadScope</h1>
+      <GlobalSearch
+        onSelectThread={onSelectThread}
+        onSelectTurn={onSelectTurn}
+        threads={threads}
+      />
       <div className="vbg-custom-topbar__meta">
-        <StatusMark status={isConnected ? "Connected" : connection.status} />
-        {isConnected && <><span className="vbg-custom-topbar__divider vbg-custom-topbar__mode" /><span className="vbg-custom-topbar__mode">Desktop snapshots · near real-time</span></>}
-        {connection.userAgent && <><span className="vbg-custom-topbar__divider vbg-custom-topbar__client" /><span className="vbg-custom-topbar__client" title={connection.userAgent}>{connection.userAgent}</span></>}
-        {connection.error && <><span className="vbg-custom-topbar__divider" /><span className="vbg-custom-topbar__error">{connection.error}</span></>}
-        <span className="vbg-custom-topbar__divider" />
-        <code>127.0.0.1</code>
+        <details className="vbg-custom-topbar__connection">
+          <summary title="Connection details">
+            <StatusMark status={connectionLabel} />
+          </summary>
+          <dl>
+            <div><dt>Mode</dt><dd>{isConnected ? "Desktop snapshots · near real-time" : "Snapshot connection"}</dd></div>
+            {connection.userAgent && <div><dt>Client</dt><dd>{connection.userAgent}</dd></div>}
+          </dl>
+        </details>
+        {connection.error && <span className="vbg-custom-topbar__error" title={connection.error}>{connection.error}</span>}
         <button
           aria-label={`Theme: ${THEME_LABELS[theme]}. Switch to ${THEME_LABELS[nextTheme]}`}
           className="vbg-custom-theme-toggle"

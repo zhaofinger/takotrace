@@ -8,10 +8,28 @@ describe("interaction flow", () => {
       .toMatchObject({ kind: "user", label: "User", title: "Request", detail: "Build the feature" });
 
     expect(flowNode(event("mcpToolCall", { server: "browser", tool: "click", arguments: { target: "row" } })))
-      .toMatchObject({ kind: "mcp", label: "MCP", title: "browser · click" });
+      .toMatchObject({ kind: "mcp", label: "MCP", title: "browser · click", participantName: "browser" });
+
+    expect(flowNode(event("mcpToolCall", {
+      server: "node_repl",
+      tool: "js",
+      arguments: { title: "Inspect the page", code: "await tab.playwright.domSnapshot()" },
+    }))).toMatchObject({ kind: "mcp", title: "Browser · Inspect the page", participantName: "node_repl" });
 
     expect(flowNode(event("skillCall", { name: "frontend-testing-debugging", path: "/skills/frontend-testing-debugging/SKILL.md" })))
-      .toMatchObject({ kind: "skill", label: "Skill", title: "frontend-testing-debugging" });
+      .toMatchObject({ kind: "skill", label: "Skill", title: "Skill · frontend-testing-debugging" });
+  });
+
+  it("summarizes path-keyed file changes from the current App Server shape", () => {
+    expect(flowNode(event("FileChange", {
+      changes: {
+        "/workspace/src/App.tsx": { type: "update", unified_diff: "+new" },
+      },
+    }))).toMatchObject({
+      kind: "file",
+      title: "File change",
+      detail: "update · /workspace/src/App.tsx",
+    });
   });
 
   it("shows subagent lifecycle and collaboration events", () => {
@@ -65,7 +83,42 @@ describe("interaction flow", () => {
     const completed = { ...event("commandExecution", { command: "npm test", exitCode: 0 }), seq: 2, status: "completed" };
 
     expect(mergeFlowEvents([started, completed])).toHaveLength(1);
-    expect(mergeFlowEvents([started, completed])[0]).toMatchObject({ seq: 1, status: "completed" });
+    expect(mergeFlowEvents([started, completed])[0]).toMatchObject({
+      seq: 1,
+      startedSeq: 1,
+      completedSeq: 2,
+      status: "completed",
+    });
+  });
+
+  it("labels shell argv commands with their actual command", () => {
+    expect(flowNode(event("commandExecution", {
+      command: ["/bin/zsh", "-lc", "sed -n '1,20p' README.md"],
+      cwd: "file:///Users/bytedance/workspace/thread-scope",
+      exitCode: 0,
+    }))).toMatchObject({
+      kind: "tool",
+      title: "Shell · sed -n '1,20p' README.md",
+      detail: "sed -n '1,20p' README.md",
+      meta: "/Users/bytedance/workspace/thread-scope · exit 0",
+    });
+  });
+
+  it("moves inferred SKILL.md loads into the Skills lane", () => {
+    const node = flowNode(event("commandExecution", {
+      command: ["/bin/zsh", "-lc", "sed -n '1,260p' /plugins/build-web-apps/skills/react-best-practices/SKILL.md"],
+      parsed_cmd: [
+        { type: "read", path: "/plugins/build-web-apps/skills/react-best-practices/SKILL.md" },
+        { type: "read", path: "/plugins/browser/skills/control-in-app-browser/SKILL.md" },
+      ],
+    }));
+
+    expect(node).toMatchObject({
+      kind: "skill",
+      label: "Skill",
+      title: "Skill load · react-best-practices +1 (inferred)",
+    });
+    expect(flowLane(node.kind)).toBe("skill");
   });
 
   it("places interaction types in stable sequence graph lanes", () => {

@@ -2,8 +2,10 @@ import type { TraceStatus } from "../types";
 import { flowKindIconName, flowNode, mergeFlowEvents } from "./InteractionFlow";
 import type { FlowEvent, FlowKind, FlowNode } from "./InteractionFlow";
 import type { IconName } from "./Icon";
+import { parallelEvidenceLabel, parallelEventId, parallelExecutionGroups } from "./parallel-execution-model";
+import type { ParallelEvidence } from "./parallel-execution-model";
 
-export type SequenceParticipant = "user" | "agent" | "tool" | "mcp" | "subagent";
+export type SequenceParticipant = "user" | "agent" | "skill" | "tool" | "mcp" | "subagent";
 export type SequenceStepType = "call" | "return" | "self" | "note";
 
 export interface ParticipantInfo {
@@ -16,6 +18,7 @@ export interface ParticipantInfo {
 export const SEQUENCE_PARTICIPANTS: Record<SequenceParticipant, ParticipantInfo> = {
   user: { key: "user", label: "User", subtext: "Prompt / Feedback", iconName: flowKindIconName("user") },
   agent: { key: "agent", label: "Agent", subtext: "Orchestrator", iconName: flowKindIconName("agent") },
+  skill: { key: "skill", label: "Skills", subtext: "Loaded Guidance", iconName: flowKindIconName("skill") },
   tool: { key: "tool", label: "Tools", subtext: "Shell / Files", iconName: flowKindIconName("tool") },
   mcp: { key: "mcp", label: "MCP", subtext: "Protocol Tools", iconName: flowKindIconName("mcp") },
   subagent: { key: "subagent", label: "Subagent", subtext: "Collaborators", iconName: flowKindIconName("subagent") },
@@ -26,6 +29,7 @@ export interface SequenceStep {
   seq: number;
   from: SequenceParticipant;
   to: SequenceParticipant;
+  toLabel?: string;
   type: SequenceStepType;
   label: string;
   title: string;
@@ -56,6 +60,17 @@ export interface SequenceDiagramModel {
   totalSteps: number;
   visibleSteps: number;
   keyStepsCount: number;
+  parallelGroups: SequenceParallelGroup[];
+}
+
+export interface SequenceParallelGroup {
+  id: string;
+  stepIds: string[];
+  startStepIndex: number;
+  endStepIndex: number;
+  maxConcurrency: number;
+  evidence: ParallelEvidence;
+  label: string;
 }
 
 function eventId(event: FlowEvent): string {
@@ -65,6 +80,7 @@ function eventId(event: FlowEvent): string {
 function participantFromKind(kind: FlowKind): SequenceParticipant {
   if (kind === "user") return "user";
   if (kind === "agent" || kind === "reasoning") return "agent";
+  if (kind === "skill") return "skill";
   if (kind === "mcp") return "mcp";
   if (kind === "subagent") return "subagent";
   return "tool";
@@ -124,11 +140,11 @@ function isCommandExecution(event: FlowEvent): boolean {
 }
 
 function stepDisplay(node: FlowNode, event: FlowEvent): Pick<SequenceStep, "displayTitle" | "detailTitle" | "isCommand"> {
-  const isCommand = isCommandExecution(event);
+  const isCommand = node.kind === "tool" && isCommandExecution(event);
   const cwd = node.meta?.split(" · ", 1)[0];
   return {
-    displayTitle: isCommand ? compactShellCommand(node.detail, cwd) : node.title,
-    detailTitle: isCommand ? normalizeShellCommand(node.detail) : node.title,
+    displayTitle: isCommand ? `Shell · ${compactShellCommand(node.detail, cwd)}` : node.title,
+    detailTitle: isCommand ? `Shell · ${normalizeShellCommand(node.detail)}` : node.title,
     isCommand,
   };
 }
@@ -226,12 +242,15 @@ export function buildSequenceDiagramModel(
       activeParticipants.add("agent");
 
       const isSubagentReturn = targetParticipant === "subagent" && node.sequenceDirection === "return";
+      const from = isSubagentReturn ? "subagent" : "agent";
+      const to = isSubagentReturn ? "agent" : targetParticipant;
 
       steps.push({
         id: `seq-${eventId(event)}`,
         seq: stepSeq++,
-        from: isSubagentReturn ? "subagent" : "agent",
-        to: isSubagentReturn ? "agent" : targetParticipant,
+        from,
+        to,
+        toLabel: to === "mcp" ? node.participantName : undefined,
         type: isSubagentReturn ? "return" : "call",
         label: `${node.label} execution`,
         title: node.title,
@@ -282,13 +301,32 @@ export function buildSequenceDiagramModel(
     });
   }
 
-  // 保证基本参与者顺序: User -> Agent -> Tools -> MCP -> Subagent
-  const participantOrder: SequenceParticipant[] = ["user", "agent", "tool", "mcp", "subagent"];
+  // 保证基本参与者顺序: User -> Agent -> Skills -> Tools -> MCP -> Subagent
+  const participantOrder: SequenceParticipant[] = ["user", "agent", "skill", "tool", "mcp", "subagent"];
   const participants = participantOrder
     .filter((key) => activeParticipants.has(key))
     .map((key) => SEQUENCE_PARTICIPANTS[key]);
 
   const keyStepsCount = merged.filter((item) => item.node.kind !== "reasoning" && item.node.kind !== "system").length;
+  const stepIndexByEventId = new Map(steps.map((step, index) => [parallelEventId(step.event), index]));
+  const parallelGroups = parallelExecutionGroups(merged.map(({ event }) => event)).flatMap((group) => {
+    const indices = group.eventIds.flatMap((id) => {
+      const index = stepIndexByEventId.get(id);
+      return index === undefined ? [] : [index];
+    });
+    if (!indices.length) return [];
+    const startStepIndex = Math.min(...indices);
+    const endStepIndex = Math.max(...indices);
+    return [{
+      id: group.id,
+      stepIds: indices.map((index) => steps[index].id),
+      startStepIndex,
+      endStepIndex,
+      maxConcurrency: group.maxConcurrency,
+      evidence: group.evidence,
+      label: parallelEvidenceLabel(group),
+    }];
+  });
 
   return {
     participants,
@@ -297,6 +335,7 @@ export function buildSequenceDiagramModel(
     totalSteps: merged.length,
     visibleSteps: steps.length,
     keyStepsCount,
+    parallelGroups,
   };
 }
 
@@ -314,7 +353,15 @@ export function exportMermaidSequence(model: SequenceDiagramModel): string {
 
   lines.push("");
 
-  for (const step of model.steps) {
+  const parallelStart = new Map(model.parallelGroups.map((group) => [group.startStepIndex, group]));
+  const parallelEnd = new Map(model.parallelGroups.map((group) => [group.endStepIndex, group]));
+  const parallelMember = new Map(model.parallelGroups.flatMap((group) => group.stepIds.map((id, index) => [id, { group, index }] as const)));
+
+  for (const [index, step] of model.steps.entries()) {
+    const startingGroup = parallelStart.get(index);
+    const membership = parallelMember.get(step.id);
+    if (startingGroup) lines.push(`  par ${sanitizeMermaidText(startingGroup.label)}`);
+    else if (membership && membership.index > 0) lines.push(`  and ${sanitizeMermaidText(step.displayTitle)}`);
     const title = sanitizeMermaidText(step.displayTitle || step.label);
     const duration = step.durationMs !== undefined ? ` (${step.durationMs}ms)` : "";
     const msg = `${title}${duration}`;
@@ -326,6 +373,7 @@ export function exportMermaidSequence(model: SequenceDiagramModel): string {
     } else {
       lines.push(`  ${step.from}->>+${step.to}: ${msg}`);
     }
+    if (parallelEnd.has(index)) lines.push("  end");
   }
 
   return lines.join("\n");

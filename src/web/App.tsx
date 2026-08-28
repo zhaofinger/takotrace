@@ -137,7 +137,9 @@ export default function App() {
   }, [selectedTurnId, turns]);
 
   const selectedTurn = turns.find((turn) => turn.id === selectedTurnId);
-  const visibleTurn = turnDetail?.id === selectedTurnId ? turnDetail : selectedTurn;
+  const visibleTurn = turnDetail && turnDetail.id === selectedTurnId
+    ? { ...turnDetail, tokenUsage: selectedTurn?.tokenUsage ?? turnDetail.tokenUsage }
+    : selectedTurn;
 
   useEffect(() => {
     const requestToken = ++turnDetailRequestToken.current;
@@ -157,7 +159,7 @@ export default function App() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || turnDetailRequestToken.current !== requestToken) return;
-        setTurnDetailError(error instanceof Error ? error.message : "Unable to load turn detail");
+        setTurnDetailError(error instanceof Error ? error.message : "Unable to load run detail");
       })
       .finally(() => {
         if (turnDetailRequestToken.current === requestToken) setTurnDetailLoading(false);
@@ -176,8 +178,14 @@ export default function App() {
       <a className="vbg-skip-link" href="#main">Skip to content</a>
       <Header
         connection={state.connection}
+        onSelectThread={setSelectedThreadId}
+        onSelectTurn={(threadId, turnId) => {
+          setSelectedThreadId(threadId);
+          setSelectedTurnId(turnId);
+        }}
         onThemeChange={() => setTheme((current) => nextThemePreference(current))}
         theme={theme}
+        threads={state.threads}
       />
       {loadError && (
         <div className="vbg-custom-error-banner" role="alert">
@@ -197,7 +205,6 @@ export default function App() {
         <DetailPanel
           error={turnDetailError}
           isLoading={threadLoading || turnDetailLoading}
-          threadId={selectedThread?.id}
           turn={visibleTurn}
         />
       </div>
