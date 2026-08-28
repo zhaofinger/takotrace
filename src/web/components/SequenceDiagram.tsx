@@ -7,11 +7,10 @@ import {
   type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
-import { DensitySwitch } from "./DensitySwitch";
-import { ExecutionMetaSummary } from "./ExecutionMetaSummary";
+import { useClipboardCopy } from "../useClipboardCopy";
+import { ExecutionInspector, type ExecutionInspectorItem } from "./ExecutionInspector";
+import { FlowViewToolbar } from "./FlowViewToolbar";
 import type { FlowEvent } from "./InteractionFlow";
-import { EventDetails, eventRaw } from "./EventDetails";
-import { HighlightedCode } from "./HighlightedCode";
 import { Icon } from "./Icon";
 import { StatusMark } from "./StatusMark";
 import {
@@ -21,73 +20,20 @@ import {
   type SequenceStep,
 } from "./sequence-diagram-model";
 
-function formatTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : `${date.toLocaleTimeString([], { hour12: false })}.${String(date.getMilliseconds()).padStart(3, "0")}`;
-}
-
-function compactRecord(entries: Array<[string, unknown]>): Record<string, unknown> | undefined {
-  const value = Object.fromEntries(entries.filter(([, item]) => item !== undefined && item !== null && item !== ""));
-  return Object.keys(value).length ? value : undefined;
-}
-
-function inspectorData(step: SequenceStep): { payload?: unknown; result?: unknown } {
-  const raw = eventRaw(step.event);
-  const result = compactRecord([
-    ["result", raw.result],
-    ["output", raw.aggregatedOutput ?? raw.output],
-    ["results", raw.results],
-    ["exitCode", raw.exitCode],
-    ["processId", raw.processId],
-    ["error", raw.error],
-  ]);
-
-  if (step.node.kind === "mcp") {
-    return { payload: raw.arguments, result };
-  }
-  if (step.node.kind === "tool" && step.isCommand) {
-    return {
-      payload: compactRecord([
-        ["command", raw.command],
-        ["cwd", raw.cwd],
-        ["actions", raw.commandActions],
-      ]),
-      result,
-    };
-  }
-  if (step.node.kind === "web") {
-    return {
-      payload: raw.action ?? compactRecord([["query", raw.query]]),
-      result,
-    };
-  }
-
-  const payload = Object.fromEntries(Object.entries(raw).filter(([key]) => ![
-    "aggregatedOutput", "error", "exitCode", "output", "processId", "result", "results",
-  ].includes(key)));
+function sequenceInspectorItem(step: SequenceStep): ExecutionInspectorItem {
   return {
-    payload: Object.keys(payload).length ? payload : undefined,
-    result,
+    seq: step.seq,
+    kind: step.node.kind,
+    title: step.detailTitle,
+    detail: step.detail,
+    status: step.status,
+    durationMs: step.durationMs,
+    at: step.at,
+    from: step.from,
+    to: step.toLabel ?? step.to,
+    type: step.type,
+    event: step.event,
   };
-}
-
-function InspectorValue({ value }: { value: unknown }) {
-  const isText = typeof value === "string";
-  let code: string;
-  try {
-    code = isText ? value : JSON.stringify(value, null, 2);
-  } catch {
-    code = String(value);
-  }
-  return (
-    <HighlightedCode
-      className="vbg-custom-sequence__inspector-value"
-      code={code}
-      language={isText ? "plaintext" : "json"}
-    />
-  );
 }
 
 interface SequenceStepTooltipState {
@@ -98,124 +44,23 @@ interface SequenceStepTooltipState {
   top: number;
 }
 
-export function SequenceStepInspector({
-  step,
-  onClose,
-}: {
-  step: SequenceStep;
-  onClose: () => void;
-}) {
-  const titleId = `sequence-step-inspector-title-${step.seq}`;
-  const [activeTab, setActiveTab] = useState<"summary" | "payload" | "result" | "timing">("summary");
-  const data = inspectorData(step);
-  const tabs = [
-    { id: "summary" as const, label: "Summary" },
-    ...(data.payload === undefined ? [] : [{ id: "payload" as const, label: "Payload" }]),
-    ...(data.result === undefined ? [] : [{ id: "result" as const, label: "Result" }]),
-    { id: "timing" as const, label: "Timing" },
-  ];
-  const kind = step.node.kind === "file" || step.node.kind === "web" ? "tool" : step.node.kind;
-  const kindLabel = kind === "reasoning" ? "Agent" : kind;
-  const selectTab = (tabId: typeof activeTab) => {
-    setActiveTab(tabId);
-    window.requestAnimationFrame(() => document.getElementById(`sequence-step-tab-${tabId}`)?.focus());
-  };
-
-  return (
-    <aside
-      className="vbg-custom-sequence__inspector vbg-custom-sequence__inspector--tabbed"
-      id="sequence-step-inspector"
-      aria-labelledby={titleId}
-    >
-      <header className="vbg-custom-sequence__inspector-header">
-        <div className="vbg-custom-sequence__inspector-title" id={titleId} aria-live="polite">
-          <span className={`vbg-custom-sequence__inspector-kind vbg-custom-sequence__inspector-kind--${kind}`}>
-            {kindLabel.toUpperCase()}
-          </span>
-          <span className="vbg-custom-sequence__step-num">Step {step.seq}</span>
-          <strong title={step.detailTitle}>{step.detailTitle}</strong>
-          <StatusMark status={step.status} />
-        </div>
-        <div className="vbg-custom-sequence__inspector-actions">
-          <button
-            type="button"
-            className="vbg-custom-sequence__inspector-close"
-            onClick={onClose}
-            aria-label="Close step details"
-            title="Close details"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-      </header>
-      <div aria-label="Step details" className="vbg-custom-sequence__inspector-tabs" role="tablist">
-        {tabs.map((tab) => (
-          <button
-            aria-controls="sequence-step-panel"
-            aria-selected={activeTab === tab.id}
-            className={activeTab === tab.id ? "is-active" : undefined}
-            id={`sequence-step-tab-${tab.id}`}
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            onKeyDown={(event) => {
-              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-              event.preventDefault();
-              const currentIndex = tabs.findIndex((item) => item.id === tab.id);
-              const nextIndex = event.key === "Home"
-                ? 0
-                : event.key === "End"
-                  ? tabs.length - 1
-                  : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-              selectTab(tabs[nextIndex].id);
-            }}
-            role="tab"
-            tabIndex={activeTab === tab.id ? 0 : -1}
-            type="button"
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <div
-        aria-labelledby={`sequence-step-tab-${activeTab}`}
-        className="vbg-custom-sequence__inspector-panel"
-        id="sequence-step-panel"
-        role="tabpanel"
-      >
-        {activeTab === "summary" && (
-          <div className="vbg-custom-sequence__inspector-summary">
-            <ExecutionMetaSummary
-              duration={step.durationMs === undefined ? undefined : `${step.durationMs}ms`}
-              from={step.from}
-              startedAt={step.at}
-              startedAtLabel={formatTime(step.at)}
-              to={step.toLabel ?? step.to}
-              type={step.type}
-            />
-            <section className="vbg-custom-sequence__inspector-section" aria-label="Step content">
-              <h3>Details</h3>
-              <EventDetails event={step.event} fallback={step.detail} />
-            </section>
-          </div>
-        )}
-        {activeTab === "payload" && data.payload !== undefined && <InspectorValue value={data.payload} />}
-        {activeTab === "result" && data.result !== undefined && <InspectorValue value={data.result} />}
-        {activeTab === "timing" && (
-          <dl className="vbg-custom-sequence__inspector-timing">
-            <div><dt>Started</dt><dd><time dateTime={step.at}>{step.at}</time></dd></div>
-            <div><dt>Duration</dt><dd>{step.durationMs === undefined ? "Not recorded" : `${step.durationMs}ms`}</dd></div>
-            <div><dt>Direction</dt><dd><code>{step.from}</code><span aria-hidden="true"> → </span><code>{step.toLabel ?? step.to}</code></dd></div>
-          </dl>
-        )}
-      </div>
-    </aside>
-  );
+export function nextSequenceStepIndex(
+  currentIndex: number,
+  total: number,
+  key: string,
+): number | null {
+  if (total <= 0) return null;
+  if (key === "Home") return 0;
+  if (key === "End") return total - 1;
+  if (key === "ArrowUp") return Math.max(0, currentIndex - 1);
+  if (key === "ArrowDown") return Math.min(total - 1, currentIndex + 1);
+  return null;
 }
 
 export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
   const [density, setDensity] = useState<"key" | "all">("key");
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const { copy: copyToClipboard, state: copyState } = useClipboardCopy(items, 2_000);
   const [stepTooltip, setStepTooltip] = useState<SequenceStepTooltipState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
 
@@ -253,18 +98,6 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
     const stepButtonId = `sequence-step-${selectedStep.seq}`;
     setSelectedStepId(null);
     window.requestAnimationFrame(() => document.getElementById(stepButtonId)?.focus());
-  };
-
-  const handleCopyMermaid = async () => {
-    const code = exportMermaidSequence(model);
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(code);
-      setCopyState("copied");
-    } catch {
-      setCopyState("error");
-    }
-    window.setTimeout(() => setCopyState("idle"), 2000);
   };
 
   const showStepTooltip = (target: HTMLElement, step: SequenceStep) => {
@@ -314,30 +147,29 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
         }
       }}
     >
-      <div className="vbg-custom-sequence__toolbar">
-        <DensitySwitch
-          checked={density === "all"}
-          label="Show all sequence steps"
-          onChange={(checked) => setDensity(checked ? "all" : "key")}
-          total={model.totalSteps}
-          visible={model.visibleSteps}
-        />
-
+      <FlowViewToolbar
+        checked={density === "all"}
+        className="vbg-custom-sequence__toolbar"
+        label="Show all sequence steps"
+        onChange={(checked) => setDensity(checked ? "all" : "key")}
+        total={model.totalSteps}
+        visible={model.visibleSteps}
+      >
         <div className="vbg-custom-sequence__actions">
           <button
             type="button"
             aria-label={copyState === "copied" ? "Mermaid copied" : copyState === "error" ? "Copy Mermaid failed" : "Copy Mermaid"}
             className="vbg-custom-sequence__copy-btn"
-            onClick={handleCopyMermaid}
+            onClick={() => void copyToClipboard(exportMermaidSequence(model))}
             title={copyState === "copied" ? "Mermaid copied" : copyState === "error" ? "Copy failed" : "Copy Mermaid sequence syntax"}
           >
-            <Icon name={copyState === "copied" ? "check" : copyState === "error" ? "alert" : "copy"} />
+            <Icon key={copyState} name={copyState === "copied" ? "check" : copyState === "error" ? "alert" : "copy"} />
             <span aria-live="polite" className="vbg-custom-sr-only">
               {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy Mermaid"}
             </span>
           </button>
         </div>
-      </div>
+      </FlowViewToolbar>
 
       {model.steps.length === 0 ? (
         <div className="vbg-custom-sequence__empty">
@@ -418,9 +250,21 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
                           }
                           setSelectedStepId(step.id);
                         }}
+                        onKeyDown={(event) => {
+                          const nextIndex = nextSequenceStepIndex(stepIndex, model.steps.length, event.key);
+                          if (nextIndex === null) return;
+                          event.preventDefault();
+                          const nextStep = model.steps[nextIndex];
+                          setStepTooltip(null);
+                          setSelectedStepId(nextStep.id);
+                          window.requestAnimationFrame(() => {
+                            document.getElementById(`sequence-step-${nextStep.seq}`)?.focus();
+                          });
+                        }}
                         type="button"
+                        tabIndex={selectedStepId ? (isSelected ? 0 : -1) : stepIndex === 0 ? 0 : -1}
                         aria-expanded={isSelected}
-                        aria-controls={isSelected ? "sequence-step-inspector" : undefined}
+                        aria-controls={isSelected ? "execution-inspector" : undefined}
                         aria-describedby={stepTooltip?.stepId === step.id ? "sequence-step-tooltip" : undefined}
                         aria-label={`Step ${step.seq}: ${step.label} - ${step.detailTitle}, ${step.from} to ${step.toLabel ?? step.to}${parallelGroup ? `, ${parallelGroup.label}` : ""}`}
                         onBlur={() => setStepTooltip(null)}
@@ -501,9 +345,9 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
           </div>
           </div>
           {selectedStep && (
-            <SequenceStepInspector
+            <ExecutionInspector
               key={selectedStep.id}
-              step={selectedStep}
+              item={sequenceInspectorItem(selectedStep)}
               onClose={closeInspector}
             />
           )}

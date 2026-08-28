@@ -1,5 +1,14 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
+import {
+  formatDateTime,
+  formatDuration,
+  formatExactNumber,
+  formatShortId,
+  formatTokenCount,
+} from "../formatters";
+import { handleRovingTabKey } from "../roving-tabs";
 import type { CompactTurn, Turn } from "../types";
+import { CopyIconButton } from "./CopyIconButton";
 import ExecutionReplay from "./ExecutionReplay";
 import { HighlightedCode } from "./HighlightedCode";
 import { Icon } from "./Icon";
@@ -10,11 +19,6 @@ const SequenceDiagram = lazy(async () => {
   return { default: module.SequenceDiagram };
 });
 
-const compactTokenFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-const exactTokenFormatter = new Intl.NumberFormat("en-US");
 const tokenDetailMetrics = [
   { key: "inputTokens", label: "Input", hideWhenZero: false },
   { key: "cachedInputTokens", label: "Cached", hideWhenZero: false },
@@ -23,29 +27,7 @@ const tokenDetailMetrics = [
   { key: "reasoningOutputTokens", label: "Reasoning", hideWhenZero: false },
 ] as const;
 
-export function formatTokenCount(value: number): string {
-  return compactTokenFormatter.format(value);
-}
-
-function formatDate(value?: string): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-export function formatDuration(value?: number): string {
-  if (value === undefined) return "—";
-  if (value < 1_000) return `${value}ms`;
-  const totalSeconds = Math.round(value / 1_000);
-  const hours = Math.floor(totalSeconds / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = totalSeconds % 60;
-  return [hours && `${hours}h`, (hours || minutes) && `${minutes}m`, `${seconds}s`].filter(Boolean).join(" ");
-}
-
-function formatShortId(value: string): string {
-  return value.length > 9 ? `${value.slice(0, 8)}…` : value;
-}
+export { formatDuration, formatTokenCount } from "../formatters";
 
 export function DetailPanel({
   error,
@@ -57,44 +39,9 @@ export function DetailPanel({
   turn?: CompactTurn | Turn;
 }) {
   const [tab, setTab] = useState<"trace" | "sequence" | "json">("trace");
-  const [copiedRunId, setCopiedRunId] = useState<string>();
-  const copyResetTimer = useRef<number | undefined>(undefined);
   const raw = useMemo(() => turn ? JSON.stringify(turn, null, 2) : "", [turn]);
   const panelId = tab === "trace" ? "turn-trace-panel" : tab === "sequence" ? "turn-sequence-panel" : "turn-json-panel";
   const panelLabelId = tab === "trace" ? "turn-trace-tab" : tab === "sequence" ? "turn-sequence-tab" : "turn-json-tab";
-  const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []);
-    const currentIndex = tabs.indexOf(event.currentTarget);
-    const nextIndex = event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? tabs.length - 1
-        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-    event.preventDefault();
-    tabs[nextIndex]?.focus();
-    tabs[nextIndex]?.click();
-  };
-
-  useEffect(() => {
-    setCopiedRunId(undefined);
-    window.clearTimeout(copyResetTimer.current);
-  }, [turn?.id]);
-
-  useEffect(() => () => window.clearTimeout(copyResetTimer.current), []);
-
-  const copyRunId = async () => {
-    if (!turn) return;
-    try {
-      await navigator.clipboard.writeText(turn.id);
-      setCopiedRunId(turn.id);
-      window.clearTimeout(copyResetTimer.current);
-      copyResetTimer.current = window.setTimeout(() => setCopiedRunId(undefined), 1_500);
-    } catch {
-      setCopiedRunId(undefined);
-    }
-  };
-
   return (
     <aside className="vbg-custom-detail" aria-label="Run detail">
       <div className="vbg-custom-detail__tabs" role="tablist">
@@ -103,7 +50,7 @@ export function DetailPanel({
           aria-selected={tab === "trace"}
           className={tab === "trace" ? "vbg-custom-is-active" : ""}
           id="turn-trace-tab"
-          onKeyDown={handleTabKey}
+          onKeyDown={handleRovingTabKey}
           onClick={() => setTab("trace")}
           role="tab"
           tabIndex={tab === "trace" ? 0 : -1}
@@ -116,7 +63,7 @@ export function DetailPanel({
           aria-selected={tab === "sequence"}
           className={tab === "sequence" ? "vbg-custom-is-active" : ""}
           id="turn-sequence-tab"
-          onKeyDown={handleTabKey}
+          onKeyDown={handleRovingTabKey}
           onClick={() => setTab("sequence")}
           role="tab"
           tabIndex={tab === "sequence" ? 0 : -1}
@@ -129,7 +76,7 @@ export function DetailPanel({
           aria-selected={tab === "json"}
           className={tab === "json" ? "vbg-custom-is-active" : ""}
           id="turn-json-tab"
-          onKeyDown={handleTabKey}
+          onKeyDown={handleRovingTabKey}
           onClick={() => setTab("json")}
           role="tab"
           tabIndex={tab === "json" ? 0 : -1}
@@ -171,7 +118,7 @@ export function DetailPanel({
               <div className="vbg-custom-turn-summary">
                 <dl className="vbg-custom-turn-overview">
                   <div><dt>Status</dt><dd><StatusMark status={turn.status} /></dd></div>
-                  <div><dt>Started</dt><dd>{formatDate(turn.startedAt)}</dd></div>
+                  <div><dt>Started</dt><dd>{formatDateTime(turn.startedAt)}</dd></div>
                   <div><dt>Duration</dt><dd title={turn.durationMs === undefined ? undefined : `${turn.durationMs}ms`}>{formatDuration(turn.durationMs)}</dd></div>
                   <div><dt>Steps</dt><dd>{"itemCount" in turn ? turn.itemCount : turn.items.length}</dd></div>
                 </dl>
@@ -181,16 +128,7 @@ export function DetailPanel({
                       <dt>Run</dt>
                       <dd>
                         <code aria-label={`Run ${turn.id}`} title={turn.id}>{formatShortId(turn.id)}</code>
-                        <button
-                          aria-label={copiedRunId === turn.id ? "Run ID copied" : "Copy run ID"}
-                          aria-live="polite"
-                          className={`vbg-custom-id-copy${copiedRunId === turn.id ? " vbg-custom-is-copied" : ""}`}
-                          onClick={() => void copyRunId()}
-                          title={copiedRunId === turn.id ? "Copied" : "Copy run ID"}
-                          type="button"
-                        >
-                          <Icon name={copiedRunId === turn.id ? "check" : "copy"} />
-                        </button>
+                        <CopyIconButton copiedLabel="Run ID copied" copyLabel="Copy run ID" value={turn.id} />
                       </dd>
                     </div>
                   </dl>
@@ -201,8 +139,8 @@ export function DetailPanel({
                           <span aria-hidden="true" className="vbg-custom-turn-token-usage__disclosure"><Icon name="chevron" /></span>
                           <span id="turn-token-usage-heading">Token usage</span>
                           <strong
-                            aria-label={`${exactTokenFormatter.format(turn.tokenUsage.totalTokens)} total tokens`}
-                            title={`${exactTokenFormatter.format(turn.tokenUsage.totalTokens)} tokens`}
+                            aria-label={`${formatExactNumber(turn.tokenUsage.totalTokens)} total tokens`}
+                            title={`${formatExactNumber(turn.tokenUsage.totalTokens)} tokens`}
                           >
                             {formatTokenCount(turn.tokenUsage.totalTokens)}
                           </strong>
@@ -211,7 +149,7 @@ export function DetailPanel({
                           {tokenDetailMetrics.map(({ key, label, hideWhenZero }) => {
                             const value = turn.tokenUsage?.[key] ?? 0;
                             if (hideWhenZero && value === 0) return null;
-                            const exactValue = exactTokenFormatter.format(value);
+                            const exactValue = formatExactNumber(value);
                             return (
                               <div key={key}>
                                 <dt>{label}</dt>

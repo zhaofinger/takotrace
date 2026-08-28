@@ -1,4 +1,6 @@
-type RecordValue = Record<string, unknown>;
+import { asRecord as record, nonEmptyText as text, type UnknownRecord } from "../value-utils";
+
+type RecordValue = UnknownRecord;
 
 export type NodeReplExecutionKind = "browser" | "computer-use" | "javascript";
 export type NodeReplExecutionSource = "metadata" | "code" | "fallback";
@@ -9,14 +11,6 @@ export interface NodeReplExecution {
   title?: string;
   displayTitle: string;
   source: NodeReplExecutionSource;
-}
-
-function record(value: unknown): RecordValue {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function execution(kind: NodeReplExecutionKind, title: string | undefined, source: NodeReplExecutionSource): NodeReplExecution {

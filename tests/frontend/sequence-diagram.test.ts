@@ -1,8 +1,12 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { ExecutionInspector } from "../../src/web/components/ExecutionInspector";
 import type { FlowEvent } from "../../src/web/components/InteractionFlow";
-import { SequenceDiagram, SequenceStepInspector } from "../../src/web/components/SequenceDiagram";
+import {
+  nextSequenceStepIndex,
+  SequenceDiagram,
+} from "../../src/web/components/SequenceDiagram";
 import { buildSequenceDiagramModel } from "../../src/web/components/sequence-diagram-model";
 
 function createEvent(type: string, raw: unknown, overrides: Partial<FlowEvent> = {}): FlowEvent {
@@ -64,6 +68,18 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain("vbg-custom-sequence__step-icon");
     expect(markup).toContain(">git status</strong>");
     expect(markup).toContain('data-tooltip="Shell · git status"');
+    expect(markup.match(/tabindex="0"/g)).toHaveLength(1);
+    expect(markup.match(/tabindex="-1"/g)).toHaveLength(2);
+  });
+
+  it("moves step selection with vertical navigation keys without wrapping", () => {
+    expect(nextSequenceStepIndex(1, 4, "ArrowUp")).toBe(0);
+    expect(nextSequenceStepIndex(1, 4, "ArrowDown")).toBe(2);
+    expect(nextSequenceStepIndex(0, 4, "ArrowUp")).toBe(0);
+    expect(nextSequenceStepIndex(3, 4, "ArrowDown")).toBe(3);
+    expect(nextSequenceStepIndex(2, 4, "Home")).toBe(0);
+    expect(nextSequenceStepIndex(1, 4, "End")).toBe(3);
+    expect(nextSequenceStepIndex(1, 4, "ArrowRight")).toBeNull();
   });
 
   it("makes lifecycle parallelism visible in the sequence UI", () => {
@@ -142,8 +158,20 @@ describe("SequenceDiagram Component", () => {
         exitCode: 0,
       }),
     ]).steps;
-    const markup = renderToStaticMarkup(createElement(SequenceStepInspector, {
-      step,
+    const markup = renderToStaticMarkup(createElement(ExecutionInspector, {
+      item: {
+        seq: step.seq,
+        kind: step.node.kind,
+        title: step.detailTitle,
+        detail: step.detail,
+        status: step.status,
+        durationMs: step.durationMs,
+        at: step.at,
+        from: step.from,
+        to: step.toLabel ?? step.to,
+        type: step.type,
+        event: step.event,
+      },
       onClose: () => undefined,
     }));
 

@@ -1,7 +1,7 @@
 import { Graph, NodeEvent } from "@antv/g6";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DensitySwitch } from "./DensitySwitch";
 import { EventDetails } from "./EventDetails";
+import { FlowViewToolbar } from "./FlowViewToolbar";
 import { flowNode } from "./InteractionFlow";
 import type { FlowEvent } from "./InteractionFlow";
 import { traceGraphModel } from "./trace-graph-model";
@@ -232,20 +232,20 @@ export default function TraceGraph({ items }: { items: FlowEvent[] }) {
 
   return (
     <section className="vbg-custom-trace-graph" aria-label="Conversation graph">
-      <div className="vbg-custom-graph-toolbar">
-        <DensitySwitch
-          checked={density === "all"}
-          label="Show all graph events"
-          onChange={(checked) => setDensity(checked ? "all" : "key")}
-          total={model.total}
-          visible={model.nodes.length}
-        />
+      <FlowViewToolbar
+        checked={density === "all"}
+        className="vbg-custom-graph-toolbar"
+        label="Show all graph events"
+        onChange={(checked) => setDensity(checked ? "all" : "key")}
+        total={model.total}
+        visible={model.nodes.length}
+      >
         <div className="vbg-custom-graph-controls">
           <button aria-label="Zoom out" onClick={() => zoom(0.8)} type="button">−</button>
           <button aria-label="Fit graph" onClick={() => void graphRef.current?.fitView({}, { duration: 180 })} type="button">Fit</button>
           <button aria-label="Zoom in" onClick={() => zoom(1.25)} type="button">+</button>
         </div>
-      </div>
+      </FlowViewToolbar>
       <div aria-label="Graph node legend" className="vbg-custom-graph-legend">
         {LEGEND.map(([kind, text]) => (
           <span className={isPrimaryGraphKind(kind) ? "vbg-custom-is-primary" : undefined} key={kind}>

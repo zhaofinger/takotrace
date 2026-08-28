@@ -1,4 +1,5 @@
 import type { TraceStatus } from "../types";
+import { eventRaw, traceEventId } from "../trace-event";
 import { flowKindIconName, flowNode, mergeFlowEvents } from "./InteractionFlow";
 import type { FlowEvent, FlowKind, FlowNode } from "./InteractionFlow";
 import type { IconName } from "./Icon";
@@ -75,10 +76,6 @@ export interface SequenceParallelGroup {
   label: string;
 }
 
-function eventId(event: FlowEvent): string {
-  return event.itemId ? `item-${event.itemId}` : `event-${event.seq}`;
-}
-
 function participantFromKind(kind: FlowKind): SequenceParticipant {
   if (kind === "user") return "user";
   if (kind === "agent" || kind === "reasoning") return "agent";
@@ -140,18 +137,6 @@ function isCommandExecution(event: FlowEvent): boolean {
     || event.method.toLowerCase().includes("commandexecution");
 }
 
-function eventPayload(event: FlowEvent): unknown {
-  if (!("raw" in event) || !event.raw || typeof event.raw !== "object" || Array.isArray(event.raw)) return undefined;
-  const raw = event.raw as Record<string, unknown>;
-  const params = raw.params && typeof raw.params === "object" && !Array.isArray(raw.params)
-    ? raw.params as Record<string, unknown>
-    : undefined;
-  const item = params?.item && typeof params.item === "object" && !Array.isArray(params.item)
-    ? params.item as Record<string, unknown>
-    : undefined;
-  return item && Object.keys(item).length ? item : raw;
-}
-
 function compactSkillTitle(title: string): string {
   return title
     .replace(/^Skill(?: load)? · /, "")
@@ -164,7 +149,7 @@ function stepDisplay(
 ): Pick<SequenceStep, "displayIcon" | "displayTitle" | "detailTitle" | "exportTitle" | "isCommand"> {
   const isCommand = node.kind === "tool" && isCommandExecution(event);
   const isSkill = node.kind === "skill";
-  const nodeRepl = node.kind === "mcp" ? nodeReplExecution(eventPayload(event)) : undefined;
+  const nodeRepl = node.kind === "mcp" ? nodeReplExecution(eventRaw(event)) : undefined;
   const nodeReplIcon: IconName | undefined = nodeRepl?.kind === "browser"
     ? "web"
     : nodeRepl?.kind === "computer-use"
@@ -210,7 +195,7 @@ export function buildSequenceDiagramModel(
       activeParticipants.add("user");
       activeParticipants.add("agent");
       steps.push({
-        id: `seq-${eventId(event)}`,
+        id: `seq-${traceEventId(event)}`,
         seq: stepSeq++,
         from: "user",
         to: "agent",
@@ -232,7 +217,7 @@ export function buildSequenceDiagramModel(
       activeParticipants.add("user");
       const isFinal = node.meta === "final_answer";
       steps.push({
-        id: `seq-${eventId(event)}`,
+        id: `seq-${traceEventId(event)}`,
         seq: stepSeq++,
         from: "agent",
         to: "user",
@@ -253,7 +238,7 @@ export function buildSequenceDiagramModel(
       activeParticipants.add("agent");
       const isSkill = node.kind === "skill";
       steps.push({
-        id: `seq-${eventId(event)}`,
+        id: `seq-${traceEventId(event)}`,
         seq: stepSeq++,
         from: "agent",
         to: "agent",
@@ -280,7 +265,7 @@ export function buildSequenceDiagramModel(
       const to = isSubagentReturn ? "agent" : targetParticipant;
 
       steps.push({
-        id: `seq-${eventId(event)}`,
+        id: `seq-${traceEventId(event)}`,
         seq: stepSeq++,
         from,
         to,

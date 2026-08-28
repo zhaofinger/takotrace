@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { projectName } from "../formatters";
 import type { Thread } from "../types";
 import { Icon } from "./Icon";
 
@@ -15,12 +16,6 @@ interface TimeThreadGroup {
   key: string;
   label: string;
   threads: Thread[];
-}
-
-function projectName(cwd?: string): string {
-  if (!cwd) return "Unknown project";
-  const normalized = cwd.replace(/[\\/]+$/, "");
-  return normalized.split(/[\\/]/).pop() || cwd;
 }
 
 function localDayNumber(date: Date): number {

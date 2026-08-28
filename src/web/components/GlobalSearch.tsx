@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react";
+import { projectName } from "../formatters";
 import type { CompactTurn, Thread } from "../types";
 import { Icon } from "./Icon";
 
@@ -76,12 +77,6 @@ export function searchThreadsAndTurns(threads: Thread[], query: string): GlobalS
   }
 
   return { threads: matchingThreads, turns: matchingTurns };
-}
-
-function projectName(cwd?: string): string {
-  if (!cwd) return "Unknown project";
-  const normalized = cwd.replace(/[\\/]+$/, "");
-  return normalized.split(/[\\/]/).pop() || cwd;
 }
 
 export function GlobalSearch({

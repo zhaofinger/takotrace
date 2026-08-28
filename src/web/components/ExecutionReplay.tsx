@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DensitySwitch } from "./DensitySwitch";
+import { formatClockTime as formatTime, formatCompactDuration as formatDuration } from "../formatters";
+import { timestampMs as timestamp } from "../trace-event";
 import { EventDetails } from "./EventDetails";
-import { ExecutionMetaSummary } from "./ExecutionMetaSummary";
+import { ExecutionInspector, type ExecutionInspectorItem } from "./ExecutionInspector";
+import { FlowViewToolbar } from "./FlowViewToolbar";
 import { flowKindIconName } from "./InteractionFlow";
 import type { FlowEvent, FlowKind } from "./InteractionFlow";
 import { Icon } from "./Icon";
@@ -44,23 +46,20 @@ const OVERVIEW_LANES: Array<{ key: OverviewLane; label: string }> = [
 const OVERVIEW_MARKER_WIDTH = 0.8;
 const OVERVIEW_TRACK_PITCH = 8;
 
-function formatDuration(value?: number): string | undefined {
-  if (value === undefined) return undefined;
-  if (value < 1_000) return `${value}ms`;
-  return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)}s`;
-}
-
-function formatTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-}
-
-function timestamp(value?: string): number | undefined {
-  if (!value) return undefined;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+function replayInspectorItem(action: ReplayAction): ExecutionInspectorItem {
+  return {
+    seq: action.event.seq,
+    kind: action.kind,
+    title: action.title,
+    detail: action.detail,
+    status: action.status,
+    durationMs: action.durationMs,
+    at: action.event.at,
+    from: "agent",
+    to: action.kind,
+    type: "call",
+    event: action.event,
+  };
 }
 
 function overviewLane(kind: FlowKind): OverviewLane {
@@ -349,7 +348,7 @@ function ExecutionGroup({
                 type="button"
                 className="vbg-custom-replay-action__summary"
                 id={`replay-action-trigger-${item.id}`}
-                aria-controls={selectedId === item.id ? "replay-action-inspector" : undefined}
+                aria-controls={selectedId === item.id ? "execution-inspector" : undefined}
                 aria-expanded={selectedId === item.id}
                 onClick={() => onSelectAction(item.id)}
               >
@@ -370,55 +369,6 @@ function ExecutionGroup({
         })}
       </ol>
     </details>
-  );
-}
-
-export function ReplayActionInspector({
-  action,
-  onClose,
-}: {
-  action: ReplayAction;
-  onClose: () => void;
-}) {
-  const titleId = `replay-action-inspector-title-${action.event.seq}`;
-  const duration = formatDuration(action.durationMs);
-
-  return (
-    <aside
-      className="vbg-custom-sequence__inspector vbg-custom-replay-inspector"
-      id="replay-action-inspector"
-      aria-labelledby={titleId}
-    >
-      <header className="vbg-custom-sequence__inspector-header">
-        <div className="vbg-custom-sequence__inspector-title" id={titleId} aria-live="polite">
-          <span className="vbg-custom-sequence__step-num">Step {action.event.seq}</span>
-          <strong title={action.title}>{action.title}</strong>
-          <StatusMark status={action.status} />
-        </div>
-        <div className="vbg-custom-sequence__inspector-actions">
-          <button
-            type="button"
-            className="vbg-custom-sequence__inspector-close"
-            onClick={onClose}
-            aria-label="Close action details"
-            title="Close details"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-      </header>
-      <div className="vbg-custom-sequence__inspector-body">
-        <ExecutionMetaSummary
-          duration={duration}
-          from="agent"
-          startedAt={action.event.at}
-          startedAtLabel={formatTime(action.event.at)}
-          to={action.kind}
-          type="call"
-        />
-        <EventDetails event={action.event} fallback={action.detail} />
-      </div>
-    </aside>
   );
 }
 
@@ -500,15 +450,14 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
       }}
     >
       <div className="vbg-custom-replay-head">
-        <header className="vbg-custom-replay-toolbar">
-          <DensitySwitch
-            checked={density === "all"}
-            label="Show all replay events"
-            onChange={(checked) => setDensity(checked ? "all" : "key")}
-            total={model.total}
-            visible={model.visible}
-          />
-        </header>
+        <FlowViewToolbar
+          checked={density === "all"}
+          className="vbg-custom-replay-toolbar"
+          label="Show all replay events"
+          onChange={(checked) => setDensity(checked ? "all" : "key")}
+          total={model.total}
+          visible={model.visible}
+        />
         <ReplayOverview items={overview} onSelect={selectOverviewItem} scale={effectiveScale} selectedId={selectedId} />
       </div>
       <div className={`vbg-custom-replay-workspace${selectedAction ? " vbg-custom-replay-workspace--with-inspector" : ""}`}>
@@ -537,8 +486,9 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
           ))}
         </ol>
         {selectedAction && (
-          <ReplayActionInspector
-            action={selectedAction}
+          <ExecutionInspector
+            key={selectedAction.id}
+            item={replayInspectorItem(selectedAction)}
             onClose={closeInspector}
           />
         )}

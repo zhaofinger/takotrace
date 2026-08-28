@@ -1,37 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { formatExactNumber, formatPercentage, formatTokenCount } from "../formatters";
+import { eventRaw, normalizedEventType } from "../trace-event";
 import type { CompactTraceEvent, CompactTurn, Thread, Turn } from "../types";
+import { asRecord, nonEmptyText } from "../value-utils";
+import { CopyIconButton } from "./CopyIconButton";
 import { Icon } from "./Icon";
 import { InlineMarkdown } from "./MarkdownContent";
 
 type DisplayTraceEvent = CompactTraceEvent & { raw?: unknown };
 
-const compactTokenFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-const exactTokenFormatter = new Intl.NumberFormat("en-US");
-const percentageFormatter = new Intl.NumberFormat("en-US", {
-  style: "percent",
-  maximumFractionDigits: 1,
-});
-
-export function formatTokenCount(value: number): string {
-  return compactTokenFormatter.format(value);
-}
-
-function normalizedType(item: CompactTraceEvent): string {
-  return item.type.toLowerCase().replaceAll(/[^a-z]/g, "");
-}
+export { formatTokenCount } from "../formatters";
 
 function rawItemText(item: DisplayTraceEvent): string | undefined {
-  if (!item.raw || typeof item.raw !== "object") return undefined;
-  const raw = item.raw as { text?: unknown; content?: unknown };
-  if (typeof raw.text === "string") return raw.text;
+  const raw = eventRaw(item);
+  const direct = nonEmptyText(raw.text);
+  if (direct) return direct;
   if (!Array.isArray(raw.content)) return undefined;
-  const text = raw.content.find((entry): entry is { type: string; text: string } =>
-    Boolean(entry && typeof entry === "object" && "type" in entry && "text" in entry
-      && (entry as { type?: unknown }).type === "text" && typeof (entry as { text?: unknown }).text === "string"));
-  return text?.text;
+  const textEntry = raw.content.map(asRecord).find((entry) => entry.type === "text" && nonEmptyText(entry.text));
+  return nonEmptyText(textEntry?.text);
 }
 
 function requestText(item: DisplayTraceEvent): string {
@@ -43,9 +29,9 @@ function requestText(item: DisplayTraceEvent): string {
 
 export function turnSummary(turn: CompactTurn | Turn): string {
   if ("summary" in turn && turn.summary) return turn.summary;
-  const userMessage = turn.items.find((item) => normalizedType(item) === "usermessage");
+  const userMessage = turn.items.find((item) => normalizedEventType(item) === "usermessage");
   if (userMessage) return requestText(userMessage);
-  const finalResponse = [...turn.items].reverse().find((item) => normalizedType(item) === "agentmessage");
+  const finalResponse = [...turn.items].reverse().find((item) => normalizedEventType(item) === "agentmessage");
   return finalResponse?.summary || turn.items.find((item) => item.summary)?.summary || `Run ${turn.id}`;
 }
 
@@ -62,8 +48,6 @@ export function Timeline({
   selectedId?: string;
   onSelect: (turn: CompactTurn) => void;
 }) {
-  const [copied, setCopied] = useState(false);
-  const copyResetTimer = useRef<number | undefined>(undefined);
   const tableRef = useRef<HTMLTableElement>(null);
   const selectedRowRef = useRef<HTMLTableRowElement>(null);
   const rows = useMemo(
@@ -73,15 +57,8 @@ export function Timeline({
   const contextWindow = thread?.tokenUsage?.modelContextWindow;
   const contextTokens = thread?.tokenUsage?.last.totalTokens;
   const contextPercentage = contextWindow && contextWindow > 0 && contextTokens !== undefined
-    ? percentageFormatter.format(contextTokens / contextWindow)
+    ? formatPercentage(contextTokens / contextWindow)
     : undefined;
-
-  useEffect(() => {
-    setCopied(false);
-    window.clearTimeout(copyResetTimer.current);
-  }, [thread?.id]);
-
-  useEffect(() => () => window.clearTimeout(copyResetTimer.current), []);
 
   useEffect(() => {
     const table = tableRef.current;
@@ -97,18 +74,6 @@ export function Timeline({
     else if (rowBottom > visibleBottom) table.scrollTop = rowBottom - table.clientHeight;
   }, [rows.length, selectedId, thread?.id]);
 
-  const copyThreadId = async () => {
-    if (!thread) return;
-    try {
-      await navigator.clipboard.writeText(thread.id);
-      setCopied(true);
-      window.clearTimeout(copyResetTimer.current);
-      copyResetTimer.current = window.setTimeout(() => setCopied(false), 1_500);
-    } catch {
-      setCopied(false);
-    }
-  };
-
   return (
     <main aria-label="Runs" className="vbg-custom-timeline" id="main">
       <header className="vbg-custom-timeline__header">
@@ -117,16 +82,7 @@ export function Timeline({
             <div className="vbg-custom-thread-identity">
               <span>Session</span>
               <code title={thread.id}>{thread.id}</code>
-              <button
-                aria-label={copied ? "Session ID copied" : "Copy session ID"}
-                aria-live="polite"
-                className={`vbg-custom-id-copy${copied ? " vbg-custom-is-copied" : ""}`}
-                onClick={() => void copyThreadId()}
-                title={copied ? "Copied" : "Copy session ID"}
-                type="button"
-              >
-                <Icon name={copied ? "check" : "copy"} />
-              </button>
+              <CopyIconButton copiedLabel="Session ID copied" copyLabel="Copy session ID" value={thread.id} />
             </div>
           ) : <span className="vbg-custom-timeline__placeholder">Select a session</span>}
         </div>
@@ -143,8 +99,8 @@ export function Timeline({
                 <div>
                   <dt>Tokens</dt>
                   <dd
-                    aria-label={`${exactTokenFormatter.format(thread.tokenUsage.total.totalTokens)} total tokens`}
-                    title={`${exactTokenFormatter.format(thread.tokenUsage.total.totalTokens)} tokens`}
+                    aria-label={`${formatExactNumber(thread.tokenUsage.total.totalTokens)} total tokens`}
+                    title={`${formatExactNumber(thread.tokenUsage.total.totalTokens)} tokens`}
                   >
                     {formatTokenCount(thread.tokenUsage.total.totalTokens)}
                   </dd>
@@ -153,8 +109,8 @@ export function Timeline({
                   <div>
                     <dt>Context</dt>
                     <dd
-                      aria-label={`${exactTokenFormatter.format(contextTokens)} of ${exactTokenFormatter.format(contextWindow)} context tokens, ${contextPercentage}`}
-                      title={`${exactTokenFormatter.format(contextTokens)} / ${exactTokenFormatter.format(contextWindow)} tokens (${contextPercentage})`}
+                      aria-label={`${formatExactNumber(contextTokens)} of ${formatExactNumber(contextWindow)} context tokens, ${contextPercentage}`}
+                      title={`${formatExactNumber(contextTokens)} / ${formatExactNumber(contextWindow)} tokens (${contextPercentage})`}
                     >
                       {contextPercentage}
                     </dd>

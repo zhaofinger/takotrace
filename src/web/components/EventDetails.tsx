@@ -1,4 +1,6 @@
 import type { CompactTraceEvent, TraceEvent } from "../types";
+import { eventRaw, normalizedEventType } from "../trace-event";
+import { asRecord as record, nonEmptyText as text, type UnknownRecord } from "../value-utils";
 import { commandText, workingDirectoryText } from "./command-display";
 import { HighlightedCode, languageForPath } from "./HighlightedCode";
 import { MarkdownContent } from "./MarkdownContent";
@@ -7,26 +9,9 @@ import { PreviewableImage } from "./PreviewableImage";
 import { SubagentThreadDetails } from "./SubagentThreadDetails";
 
 type DetailEvent = CompactTraceEvent | TraceEvent;
-type RecordValue = Record<string, unknown>;
+type RecordValue = UnknownRecord;
 
-function record(value: unknown): RecordValue {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-export function eventRaw(event: DetailEvent): RecordValue {
-  if (!("raw" in event)) return {};
-  const raw = record(event.raw);
-  const item = record(record(raw.params).item);
-  return Object.keys(item).length ? item : raw;
-}
-
-function normalizedType(event: DetailEvent): string {
-  return (text(eventRaw(event).type) ?? event.type).toLowerCase().replaceAll(/[^a-z]/g, "");
-}
+export { eventRaw } from "../trace-event";
 
 function preview(value: string, maximum = 4_000): string {
   if (value.length <= maximum) return value;
@@ -244,7 +229,7 @@ function UserMessageDetails({ event, fallback, raw }: { event: DetailEvent; fall
 
 export function EventDetails({ event, fallback }: { event: DetailEvent; fallback: string }) {
   const raw = eventRaw(event);
-  const type = normalizedType(event);
+  const type = normalizedEventType(event);
 
   if (type === "usermessage") return <UserMessageDetails event={event} fallback={fallback} raw={raw} />;
   if (type === "commandexecution") return <CommandDetails raw={raw} />;

@@ -1,12 +1,6 @@
-type RecordValue = Record<string, unknown>;
+import { asRecord as record, nonEmptyText as text, type UnknownRecord } from "../value-utils";
 
-function record(value: unknown): RecordValue {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
+type RecordValue = UnknownRecord;
 
 function skillNameFromPath(value: unknown): string | undefined {
   const path = text(value)?.replaceAll("\\", "/");

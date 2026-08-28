@@ -6,28 +6,12 @@ import {
   subscribeToSubagentDetail,
 } from "../subagent-detail-store";
 import type { ThreadDetail, TraceEvent } from "../types";
+import { eventRaw, normalizedEventType } from "../trace-event";
+import { nonEmptyText as text, type UnknownRecord } from "../value-utils";
 import { MarkdownContent } from "./MarkdownContent";
 import { StatusMark } from "./StatusMark";
 
-type RecordValue = Record<string, unknown>;
-
-function record(value: unknown): RecordValue {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function rawItem(event: TraceEvent): RecordValue {
-  const raw = record(event.raw);
-  const item = record(record(raw.params).item);
-  return Object.keys(item).length ? item : raw;
-}
-
-function normalizedType(event: TraceEvent): string {
-  return (text(rawItem(event).type) ?? event.type).toLowerCase().replaceAll(/[^a-z]/g, "");
-}
+type RecordValue = UnknownRecord;
 
 export function subagentTargetThreadIds(raw: RecordValue): string[] {
   const values = [raw.agentThreadId, ...(Array.isArray(raw.receiverThreadIds) ? raw.receiverThreadIds : [])];
@@ -35,8 +19,8 @@ export function subagentTargetThreadIds(raw: RecordValue): string[] {
 }
 
 export function subagentEventLabel(event: TraceEvent): string {
-  const raw = rawItem(event);
-  const type = normalizedType(event);
+  const raw = eventRaw(event);
+  const type = normalizedEventType(event);
   if (type === "usermessage") return "Prompt";
   if (type === "reasoning") return "Reasoning";
   if (type === "agentmessage") {
@@ -54,7 +38,7 @@ function visibleItems(thread: ThreadDetail): TraceEvent[] {
 }
 
 function displaySummary(event: TraceEvent): string {
-  const raw = rawItem(event);
+  const raw = eventRaw(event);
   const reasoning = Array.isArray(raw.summary)
     ? raw.summary.flatMap((entry) => text(entry) ? [text(entry)!] : []).join("\n")
     : text(raw.summary);
@@ -119,7 +103,7 @@ function SubagentEventBody({
   event: TraceEvent;
   renderEventDetails?: (event: TraceEvent) => ReactNode;
 }) {
-  const type = normalizedType(event);
+  const type = normalizedEventType(event);
   if (type === "usermessage" || type === "agentmessage" || type === "reasoning" || event.status === "error" || event.status === "failed") {
     return <div className="vbg-custom-subagent-event__body"><MarkdownContent>{displaySummary(event)}</MarkdownContent></div>;
   }

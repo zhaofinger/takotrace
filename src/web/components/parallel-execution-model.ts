@@ -1,5 +1,7 @@
 import { flowNode } from "./InteractionFlow";
 import type { FlowEvent } from "./InteractionFlow";
+import { eventRaw, timestampMs, traceEventId } from "../trace-event";
+import { normalizedToken } from "../value-utils";
 
 export type ParallelEvidence = "timestamp" | "lifecycle" | "fork-join";
 
@@ -17,23 +19,8 @@ interface EventSpan {
   end: number;
 }
 
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
-
-function rawItem(event: FlowEvent): Record<string, unknown> {
-  if (!("raw" in event)) return {};
-  const raw = record(event.raw);
-  const item = record(record(raw.params).item);
-  return Object.keys(item).length ? item : raw;
-}
-
-function normalized(value: unknown): string {
-  return typeof value === "string" ? value.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
-}
-
 export function parallelEventId(event: FlowEvent): string {
-  return event.itemId ? `item-${event.itemId}` : `event-${event.seq}`;
+  return traceEventId(event);
 }
 
 function actionEvents(events: FlowEvent[]): FlowEvent[] {
@@ -43,16 +30,10 @@ function actionEvents(events: FlowEvent[]): FlowEvent[] {
   });
 }
 
-function timestamp(value?: string): number | undefined {
-  if (!value) return undefined;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 function actualTimeSpans(events: FlowEvent[]): EventSpan[] {
   return events.flatMap((event) => {
-    const start = timestamp(event.startedAt);
-    const end = timestamp(event.completedAt);
+    const start = timestampMs(event.startedAt);
+    const end = timestampMs(event.completedAt);
     return start !== undefined && end !== undefined && end > start
       ? [{ id: parallelEventId(event), start, end }]
       : [];
@@ -144,10 +125,10 @@ function forkJoinGroups(events: FlowEvent[]): ParallelGroup[] {
   };
 
   for (const event of events) {
-    const raw = rawItem(event);
-    const type = normalized(raw.type ?? event.type);
+    const raw = eventRaw(event);
+    const type = normalizedToken(raw.type ?? event.type);
     if (type === "subagentactivity") {
-      const kind = normalized(raw.kind);
+      const kind = normalizedToken(raw.kind);
       const threadId = typeof (raw.agentThreadId ?? raw.agent_thread_id) === "string"
         ? String(raw.agentThreadId ?? raw.agent_thread_id).trim()
         : "";
@@ -157,7 +138,7 @@ function forkJoinGroups(events: FlowEvent[]): ParallelGroup[] {
       continue;
     }
     if (type !== "collabagenttoolcall") continue;
-    const tool = normalized(raw.tool);
+    const tool = normalizedToken(raw.tool);
     if (tool === "spawnagent" || tool === "resumeagent") {
       forks.push({ id: parallelEventId(event), targets: receivers(raw) });
     } else if (tool === "wait" || tool === "waitagent") {

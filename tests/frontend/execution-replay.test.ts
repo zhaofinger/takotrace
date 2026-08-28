@@ -1,7 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import ExecutionReplay, { ReplayActionInspector } from "../../src/web/components/ExecutionReplay.js";
+import { ExecutionInspector } from "../../src/web/components/ExecutionInspector.js";
+import ExecutionReplay from "../../src/web/components/ExecutionReplay.js";
 import type { TraceEvent } from "../../src/web/types.js";
 
 describe("ExecutionReplay waterfall", () => {
@@ -193,6 +194,7 @@ describe("ExecutionReplay waterfall", () => {
   it("keeps action details out of the list row and renders them in the shared inspector", () => {
     const mcpEvent = event(2, "mcpToolCall", {
       tool: "node_repl",
+      arguments: { code: "1 + 1" },
       result: { content: [{ type: "text", text: "done" }] },
     });
     const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
@@ -201,17 +203,18 @@ describe("ExecutionReplay waterfall", () => {
         mcpEvent,
       ],
     }));
-    const inspectorMarkup = renderToStaticMarkup(createElement(ReplayActionInspector, {
-      action: {
-        id: "item-2",
-        batch: 1,
+    const inspectorMarkup = renderToStaticMarkup(createElement(ExecutionInspector, {
+      item: {
+        seq: mcpEvent.seq,
         event: mcpEvent,
         kind: "mcp",
-        label: "Tool",
         title: "node_repl · js",
         detail: "node_repl · js",
         status: "completed",
-        timing: "order",
+        at: mcpEvent.at,
+        from: "agent",
+        to: "mcp",
+        type: "call",
       },
       onClose: () => undefined,
     }));
@@ -219,10 +222,13 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).toContain('class="vbg-custom-replay-action__summary"');
     expect(markup).not.toContain('vbg-custom-replay-action__detail');
     expect(markup).not.toContain("Result · 1 block");
-    expect(inspectorMarkup).toContain('id="replay-action-inspector"');
+    expect(inspectorMarkup).toContain('id="execution-inspector"');
+    expect(inspectorMarkup).toContain('role="tablist"');
+    expect(inspectorMarkup).toContain("Payload");
+    expect(inspectorMarkup).toContain("Result");
     expect(inspectorMarkup).not.toContain("Collapse action details");
     expect(inspectorMarkup).not.toContain("Expand action details");
-    expect(inspectorMarkup).toContain("Close action details");
+    expect(inspectorMarkup).toContain("Close execution details");
     expect(inspectorMarkup).toContain("Result · 1 block");
     expect(inspectorMarkup).toContain("done");
   });

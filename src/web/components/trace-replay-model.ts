@@ -1,4 +1,5 @@
 import type { TraceStatus } from "../types";
+import { eventRaw, timestampMs, traceEventId } from "../trace-event";
 import { flowNode, mergeFlowEvents } from "./InteractionFlow";
 import type { FlowEvent, FlowKind, FlowNode } from "./InteractionFlow";
 import { parallelExecutionGroups, parallelEventId } from "./parallel-execution-model";
@@ -55,25 +56,15 @@ export interface ReplayExecutionTiming {
   timedActions: number;
 }
 
-function eventId(event: FlowEvent): string {
-  return event.itemId ? `item-${event.itemId}` : `event-${event.seq}`;
-}
-
-function parsedTime(value?: string): number | undefined {
-  if (!value) return undefined;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 function eventTiming(event: FlowEvent): Pick<ReplayAction, "startedAtMs" | "completedAtMs" | "timing"> {
-  const startedAtMs = parsedTime(event.startedAt);
-  const completedAtMs = parsedTime(event.completedAt);
+  const startedAtMs = timestampMs(event.startedAt);
+  const completedAtMs = timestampMs(event.completedAt);
   if (startedAtMs !== undefined && completedAtMs !== undefined && completedAtMs >= startedAtMs) {
     return { startedAtMs, completedAtMs, timing: "observed" };
   }
   if (event.durationMs !== undefined && event.durationMs > 0) {
     const inferredEnd = completedAtMs
-      ?? (event.method.includes("completed") || event.method.includes("failed") ? parsedTime(event.at) : undefined);
+      ?? (event.method.includes("completed") || event.method.includes("failed") ? timestampMs(event.at) : undefined);
     if (inferredEnd !== undefined) {
       return {
         startedAtMs: inferredEnd - event.durationMs,
@@ -88,14 +79,10 @@ function eventTiming(event: FlowEvent): Pick<ReplayAction, "startedAtMs" | "comp
 function action(event: FlowEvent, node: FlowNode, batch: number, parallel?: ParallelGroup): ReplayAction {
   const isMcp = node.kind === "mcp";
   const timing = eventTiming(event);
-  const raw = "raw" in event && event.raw && typeof event.raw === "object" ? event.raw as Record<string, unknown> : {};
-  const rawItem = raw.params && typeof raw.params === "object"
-    ? (raw.params as Record<string, unknown>).item
-    : undefined;
-  const item = rawItem && typeof rawItem === "object" ? rawItem as Record<string, unknown> : raw;
+  const item = eventRaw(event);
   const commandFailed = node.kind === "tool" && typeof item.exitCode === "number" && item.exitCode !== 0;
   return {
-    id: eventId(event),
+    id: traceEventId(event),
     batch,
     event,
     kind: node.kind as ReplayAction["kind"],
@@ -125,7 +112,7 @@ export function traceReplayModel(items: FlowEvent[], density: ReplayDensity): Tr
   let currentBatch = 0;
   for (const item of merged) {
     if (item.node.kind === "user" || item.node.kind === "agent") {
-      const id = eventId(item.event);
+      const id = traceEventId(item.event);
       blocks.push({ type: "message", id, event: item.event, node: item.node as ReplayMessage["node"] });
       currentAgentId = item.node.kind === "agent" ? id : undefined;
       forceExecutionBlock = true;
@@ -139,7 +126,7 @@ export function traceReplayModel(items: FlowEvent[], density: ReplayDensity): Tr
     if (!forceExecutionBlock && previous?.type === "execution") previous.actions.push(action(item.event, item.node, currentBatch, parallel));
     else blocks.push({
       type: "execution",
-      id: `execution-${eventId(item.event)}`,
+      id: `execution-${traceEventId(item.event)}`,
       ownerAgentId: currentAgentId,
       actions: [action(item.event, item.node, currentBatch, parallel)],
     });

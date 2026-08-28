@@ -31,6 +31,7 @@ export function Header({
     ? "Connected"
     : `${connection.status.charAt(0).toUpperCase()}${connection.status.slice(1)}`;
   const nextTheme = nextThemePreference(theme);
+  const themeIcon = theme === "auto" ? "monitor" : theme === "light" ? "sun" : "moon";
 
   return (
     <header className="vbg-custom-topbar">
@@ -58,7 +59,7 @@ export function Header({
           title={`Theme: ${THEME_LABELS[theme]}`}
           type="button"
         >
-          <Icon name={theme === "auto" ? "monitor" : theme === "light" ? "sun" : "moon"} />
+          <Icon key={themeIcon} name={themeIcon} />
           <span>{THEME_LABELS[theme]}</span>
         </button>
       </div>

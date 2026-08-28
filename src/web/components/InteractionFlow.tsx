@@ -1,5 +1,8 @@
 import { useMemo } from "react";
 import type { CompactTraceEvent, TraceEvent } from "../types";
+import { formatClockTimeWithMilliseconds } from "../formatters";
+import { eventRaw } from "../trace-event";
+import { asRecord as record, nonEmptyText as text, normalizedToken } from "../value-utils";
 import { EventDetails } from "./EventDetails";
 import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
@@ -30,18 +33,6 @@ export interface FlowNode {
   sequenceDirection?: "call" | "return";
 }
 
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function normalizedToken(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
 function subagentName(raw: Record<string, unknown>): string | undefined {
   const agents = Array.isArray(raw.receiverAgents)
     ? raw.receiverAgents
@@ -56,13 +47,6 @@ function subagentName(raw: Record<string, unknown>): string | undefined {
   )).find(Boolean);
   const path = namedAgent ?? text(raw.agentPath) ?? text(raw.agent_path);
   return path?.split("/").filter(Boolean).pop();
-}
-
-function rawOf(event: FlowEvent): Record<string, unknown> {
-  if (!("raw" in event)) return {};
-  const raw = record(event.raw);
-  const item = record(record(raw.params).item);
-  return Object.keys(item).length ? item : raw;
 }
 
 function userText(raw: Record<string, unknown>): string | undefined {
@@ -105,15 +89,8 @@ function fileChanges(raw: Record<string, unknown>): string | undefined {
   return changes.join("\n") || undefined;
 }
 
-function formatTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : `${date.toLocaleTimeString([], { hour12: false })}.${String(date.getMilliseconds()).padStart(3, "0")}`;
-}
-
 export function flowNode(event: FlowEvent): FlowNode {
-  const raw = rawOf(event);
+  const raw = eventRaw(event);
   const rawType = text(raw.type);
   let type = (rawType ?? event.type).toLowerCase();
   if (type === "item") {
@@ -320,7 +297,7 @@ export function InteractionFlow({ items }: { items: FlowEvent[] }) {
                 <span className="vbg-custom-flow-node__step">{index + 1}</span>
                 <span className="vbg-custom-flow-node__label">{node.label}</span>
                 <strong>{node.title}</strong>
-                <time dateTime={event.at}>{formatTime(event.at)}</time>
+                <time dateTime={event.at}>{formatClockTimeWithMilliseconds(event.at)}</time>
               </header>
               <EventDetails event={event} fallback={node.detail} />
               <footer>
