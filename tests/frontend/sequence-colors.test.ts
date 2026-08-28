@@ -31,12 +31,12 @@ describe("sequence semantic colors", () => {
     expect(styles).toContain("--vbg-role-tool-bg: light-dark(oklch(");
   });
 
-  it("uses global focus for unselected steps and role focus for selected steps", () => {
+  it("uses the selected state alone for keyboard focus", () => {
     const focusRules = [...styles.matchAll(/\.vbg-custom-sequence__step-row:focus-visible \{([^}]*)\}/g)]
       .map((match) => match[1] ?? "");
     const selectedFocusRule = styles.match(/\.vbg-report \.vbg-custom-sequence__step-row--selected:focus-visible \{([^}]*)\}/)?.[1] ?? "";
 
-    expect(focusRules.some((rule) => rule.includes("outline: 2px solid var(--vbg-focus)"))).toBe(true);
-    expect(selectedFocusRule).toContain("outline-color: var(--vbg-sequence-step-color)");
+    expect(focusRules).toEqual(["\n  outline: none;\n"]);
+    expect(selectedFocusRule).toBe("");
   });
 });

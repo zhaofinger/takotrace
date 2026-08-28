@@ -156,9 +156,6 @@ function overviewLayout(items: OverviewItem[], scale: ReplayTimeScale): Overview
 function overviewHasActualTiming(items: OverviewItem[]): boolean {
   const timed = items.filter((item) => item.timing !== "order");
   if (timed.length < 2) return false;
-  const timestampsFollowExecutionOrder = items.every((item, index) => index === 0
-    || item.startedAtMs >= items[index - 1].startedAtMs);
-  if (!timestampsFollowExecutionOrder) return false;
   const startedAtMs = timed.map((item) => item.startedAtMs);
   return new Set(startedAtMs).size > 1
     && Math.max(...timed.map((item) => item.completedAtMs)) > Math.min(...startedAtMs);

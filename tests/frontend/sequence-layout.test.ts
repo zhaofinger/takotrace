@@ -22,4 +22,13 @@ describe("sequence step spacing", () => {
     expect(selfPathRule).toContain("top: 28px");
     expect(selfPathRule).toContain("height: 16px");
   });
+
+  it("keeps timing metadata compact", () => {
+    const timingRule = styles.match(/\.vbg-custom-sequence__inspector-timing \{([^}]*)\}/)?.[1] ?? "";
+    const timingCodeRule = styles.match(/\.vbg-custom-sequence__inspector-timing code \{([^}]*)\}/)?.[1] ?? "";
+
+    expect(timingRule).toContain("font-size: var(--vbg-type-metadata)");
+    expect(timingRule).toContain("line-height: var(--vbg-leading-caption)");
+    expect(timingCodeRule).toContain("font-size: inherit");
+  });
 });

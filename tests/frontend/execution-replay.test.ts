@@ -95,7 +95,7 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).not.toContain("<span>MCP</span>");
   });
 
-  it("falls back to sequence when snapshot timestamps contradict execution order", () => {
+  it("preserves actual timing when timestamps overlap execution order", () => {
     const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
       items: [
         {
@@ -116,9 +116,11 @@ describe("ExecutionReplay waterfall", () => {
       ],
     }));
 
-    expect(markup).toContain('class="vbg-custom-replay-overview__sequence"');
-    expect(markup).toContain('title="Bar width represents relative duration"');
-    expect(markup).toMatch(/vbg-custom-replay-overview__bar--user[^>]+left:0%/);
+    expect(markup).not.toContain('class="vbg-custom-replay-overview__sequence"');
+    expect(markup).toContain('title="Bar width represents duration"');
+    expect(markup).toMatch(/vbg-custom-replay-overview__bar--user[^>]+left:99\.2%/);
+    const overviewWidths = [...markup.matchAll(/width:max\(6px, ([\d.]+)%\)/g)].map((match) => Number(match[1]));
+    expect(new Set(overviewWidths).size).toBeGreaterThan(1);
   });
 
   it("labels actions without lifecycle timing as order only", () => {
