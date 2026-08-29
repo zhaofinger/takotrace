@@ -8,7 +8,14 @@ import { parallelEvidenceLabel, parallelEventId, parallelExecutionGroups } from 
 import type { ParallelEvidence } from "./parallel-execution-model";
 
 export type SequenceParticipant = "user" | "agent" | "tool" | "mcp" | "subagent";
+export type SequenceDiagramScope = "main" | "subagent";
 export type SequenceStepType = "call" | "return" | "self" | "note";
+
+export interface SequenceThreadContext {
+  id: string;
+  parentThreadId?: string;
+  agentPath?: string;
+}
 
 export interface ParticipantInfo {
   key: SequenceParticipant;
@@ -23,6 +30,13 @@ export const SEQUENCE_PARTICIPANTS: Record<SequenceParticipant, ParticipantInfo>
   tool: { key: "tool", label: "Tools", subtext: "Shell / Files", iconName: flowKindIconName("tool") },
   mcp: { key: "mcp", label: "MCP", subtext: "Protocol Tools", iconName: flowKindIconName("mcp") },
   subagent: { key: "subagent", label: "Subagent", subtext: "Collaborators", iconName: flowKindIconName("subagent") },
+};
+
+const SUBAGENT_SEQUENCE_PARTICIPANTS: Record<SequenceParticipant, ParticipantInfo> = {
+  ...SEQUENCE_PARTICIPANTS,
+  user: { key: "user", label: "Parent Agent", subtext: "Orchestrator", iconName: flowKindIconName("agent") },
+  agent: { key: "agent", label: "Subagent", subtext: "Current worker", iconName: flowKindIconName("subagent") },
+  subagent: { key: "subagent", label: "Child Subagent", subtext: "Delegated worker", iconName: flowKindIconName("subagent") },
 };
 
 export interface SequenceStep {
@@ -46,7 +60,6 @@ export interface SequenceStep {
   at: string;
   event: FlowEvent;
   node: FlowNode;
-  isKey: boolean;
 }
 
 export interface SequenceActivation {
@@ -60,9 +73,6 @@ export interface SequenceDiagramModel {
   participants: ParticipantInfo[];
   steps: SequenceStep[];
   activations: SequenceActivation[];
-  totalSteps: number;
-  visibleSteps: number;
-  keyStepsCount: number;
   parallelGroups: SequenceParallelGroup[];
 }
 
@@ -82,6 +92,21 @@ function participantFromKind(kind: FlowKind): SequenceParticipant {
   if (kind === "mcp") return "mcp";
   if (kind === "subagent") return "subagent";
   return "tool";
+}
+
+function isParentAgentActivity(event: FlowEvent, thread?: SequenceThreadContext): boolean {
+  if (!thread) return false;
+  const raw = eventRaw(event);
+  const targetThreadId = typeof raw.agentThreadId === "string"
+    ? raw.agentThreadId
+    : typeof raw.agent_thread_id === "string" ? raw.agent_thread_id : undefined;
+  if (thread.parentThreadId && targetThreadId === thread.parentThreadId) return true;
+
+  const targetPath = typeof raw.agentPath === "string"
+    ? raw.agentPath
+    : typeof raw.agent_path === "string" ? raw.agent_path : undefined;
+  if (!targetPath || !thread.agentPath || targetPath === thread.agentPath) return false;
+  return thread.agentPath.startsWith(`${targetPath.replace(/\/$/, "")}/`);
 }
 
 const SHELL_WRAPPER = /^(?:(?:\/usr)?\/bin\/)?(?:zsh|bash|sh)\s+-(?:lc|c)\s+/i;
@@ -171,7 +196,8 @@ function stepDisplay(
 
 export function buildSequenceDiagramModel(
   items: FlowEvent[],
-  density: "key" | "all" = "all",
+  scope: SequenceDiagramScope = "main",
+  thread?: SequenceThreadContext,
 ): SequenceDiagramModel {
   const merged = mergeFlowEvents(items).map((event) => ({
     event,
@@ -184,13 +210,6 @@ export function buildSequenceDiagramModel(
   let stepSeq = 1;
 
   for (const { event, node } of merged) {
-    const isReasoningOrSystem = node.kind === "reasoning" || node.kind === "system";
-    const isKey = !isReasoningOrSystem;
-
-    if (density === "key" && !isKey) {
-      continue;
-    }
-
     if (node.kind === "user") {
       activeParticipants.add("user");
       activeParticipants.add("agent");
@@ -200,7 +219,7 @@ export function buildSequenceDiagramModel(
         from: "user",
         to: "agent",
         type: "call",
-        label: "User prompt",
+        label: scope === "subagent" ? "Task input" : "User prompt",
         title: node.title,
         ...stepDisplay(node, event),
         detail: node.detail,
@@ -210,7 +229,6 @@ export function buildSequenceDiagramModel(
         at: event.at,
         event,
         node,
-        isKey: true,
       });
     } else if (node.kind === "agent") {
       activeParticipants.add("agent");
@@ -222,7 +240,9 @@ export function buildSequenceDiagramModel(
         from: "agent",
         to: "user",
         type: isFinal ? "return" : "call",
-        label: isFinal ? "Final Answer" : "Commentary / Update",
+        label: isFinal
+          ? scope === "subagent" ? "Result" : "Final Answer"
+          : scope === "subagent" ? "Progress update" : "Commentary / Update",
         title: node.title,
         ...stepDisplay(node, event),
         detail: node.detail,
@@ -232,7 +252,6 @@ export function buildSequenceDiagramModel(
         at: event.at,
         event,
         node,
-        isKey: true,
       });
     } else if (node.kind === "reasoning" || node.kind === "skill") {
       activeParticipants.add("agent");
@@ -253,16 +272,22 @@ export function buildSequenceDiagramModel(
         at: event.at,
         event,
         node,
-        isKey: isSkill,
       });
     } else {
       const targetParticipant = participantFromKind(node.kind);
-      activeParticipants.add(targetParticipant);
+      const targetsParent = scope === "subagent"
+        && targetParticipant === "subagent"
+        && isParentAgentActivity(event, thread);
+      activeParticipants.add(targetsParent ? "user" : targetParticipant);
       activeParticipants.add("agent");
 
-      const isSubagentReturn = targetParticipant === "subagent" && node.sequenceDirection === "return";
-      const from = isSubagentReturn ? "subagent" : "agent";
-      const to = isSubagentReturn ? "agent" : targetParticipant;
+      const isReturn = targetParticipant === "subagent" && node.sequenceDirection === "return";
+      const from = targetsParent
+        ? isReturn ? "agent" : "user"
+        : isReturn ? "subagent" : "agent";
+      const to = targetsParent
+        ? isReturn ? "user" : "agent"
+        : isReturn ? "agent" : targetParticipant;
 
       steps.push({
         id: `seq-${traceEventId(event)}`,
@@ -270,7 +295,7 @@ export function buildSequenceDiagramModel(
         from,
         to,
         toLabel: to === "mcp" ? node.participantName : undefined,
-        type: isSubagentReturn ? "return" : "call",
+        type: isReturn ? "return" : "call",
         label: `${node.label} execution`,
         title: node.title,
         ...stepDisplay(node, event),
@@ -281,7 +306,6 @@ export function buildSequenceDiagramModel(
         at: event.at,
         event,
         node,
-        isKey: true,
       });
     }
   }
@@ -322,11 +346,11 @@ export function buildSequenceDiagramModel(
 
   // 保证基本参与者顺序: User -> Agent -> Tools -> MCP -> Subagent
   const participantOrder: SequenceParticipant[] = ["user", "agent", "tool", "mcp", "subagent"];
+  const participantCatalog = scope === "subagent" ? SUBAGENT_SEQUENCE_PARTICIPANTS : SEQUENCE_PARTICIPANTS;
   const participants = participantOrder
     .filter((key) => activeParticipants.has(key))
-    .map((key) => SEQUENCE_PARTICIPANTS[key]);
+    .map((key) => participantCatalog[key]);
 
-  const keyStepsCount = merged.filter((item) => item.node.kind !== "reasoning" && item.node.kind !== "system").length;
   const stepIndexByEventId = new Map(steps.map((step, index) => [parallelEventId(step.event), index]));
   const parallelGroups = parallelExecutionGroups(merged.map(({ event }) => event)).flatMap((group) => {
     const indices = group.eventIds.flatMap((id) => {
@@ -351,9 +375,6 @@ export function buildSequenceDiagramModel(
     participants,
     steps,
     activations,
-    totalSteps: merged.length,
-    visibleSteps: steps.length,
-    keyStepsCount,
     parallelGroups,
   };
 }

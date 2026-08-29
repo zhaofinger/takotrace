@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { addTokenUsage, threadToHistory, tokenUsageDelta } from './trace.js';
 import type {
-  AppState, CompactAppState, ConnectionStatus, HistoricalThread, ThreadState, TraceEvent, TurnState,
+  AppState, CompactAppState, ConnectionStatus, HistoricalThread, ProviderId, ProviderSelection, ThreadState, TraceEvent, TurnState,
 } from './types.js';
 
 export interface StoreLimits {
@@ -21,7 +21,8 @@ export class TraceStore {
   private readonly limits: StoreLimits;
   private readonly state: AppState = { connection: { status: 'connecting' }, threads: [], events: [] };
   private readonly liveThreadIds = new Set<string>();
-  private historicalThreadIds = new Set<string>();
+  private readonly currentModelByThread = new Map<string, string>();
+  private readonly historicalThreadIdsByProvider = new Map<ProviderId | 'unknown', Set<string>>();
   private nextSeq = 1;
 
   constructor(limits: Partial<StoreLimits> = {}) {
@@ -42,6 +43,7 @@ export class TraceStore {
         status: thread.status,
         turnsLoaded: thread.turnsLoaded,
         historySource: thread.historySource,
+        provider: thread.provider,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
         cwd: thread.cwd,
@@ -53,6 +55,7 @@ export class TraceStore {
           startedAt: turn.startedAt,
           completedAt: turn.completedAt,
           durationMs: turn.durationMs,
+          model: turn.model,
           tokenUsage: turn.tokenUsage,
           summary: compactTurnSummary(turn),
           itemCount: turn.items.length,
@@ -72,12 +75,13 @@ export class TraceStore {
       startedAt: turn.startedAt,
       completedAt: turn.completedAt,
       durationMs: turn.durationMs,
+      model: turn.model,
       tokenUsage: turn.tokenUsage,
       items: turn.items.map((item) => ({ ...item, raw: sanitizeRaw(item.raw) })),
     };
   }
 
-  setConnection(status: ConnectionStatus, details: { userAgent?: string; error?: string } = {}): void {
+  setConnection(status: ConnectionStatus, details: { provider?: ProviderSelection; userAgent?: string; error?: string } = {}): void {
     this.state.connection = { status, ...details };
     this.emitter.emit('state');
   }
@@ -109,19 +113,23 @@ export class TraceStore {
     return () => this.emitter.off('state', listener);
   }
 
-  synchronizeThreads(values: unknown[], replace = true): void {
+  synchronizeThreads(values: unknown[], replace = true, provider?: ProviderId): void {
     const histories = values.flatMap((value) => {
       const thread = threadToHistory(value);
       return thread ? [thread] : [];
     });
+    const scope = provider ?? singleHistoryProvider(histories) ?? 'unknown';
     const nextHistoricalIds = new Set(histories.map((thread) => thread.id));
     for (const thread of histories) this.mergeHistoryThread(thread);
     if (replace) {
+      const previousHistoricalIds = this.historicalThreadIdsByProvider.get(scope) ?? new Set<string>();
       this.state.threads = this.state.threads.filter((thread) =>
-        !this.historicalThreadIds.has(thread.id) || nextHistoricalIds.has(thread.id) || this.liveThreadIds.has(thread.id));
-      this.historicalThreadIds = nextHistoricalIds;
+        !previousHistoricalIds.has(thread.id) || nextHistoricalIds.has(thread.id) || this.liveThreadIds.has(thread.id));
+      this.historicalThreadIdsByProvider.set(scope, nextHistoricalIds);
     } else {
-      for (const id of nextHistoricalIds) this.historicalThreadIds.add(id);
+      const known = this.historicalThreadIdsByProvider.get(scope) ?? new Set<string>();
+      for (const id of nextHistoricalIds) known.add(id);
+      this.historicalThreadIdsByProvider.set(scope, known);
     }
     this.state.threads.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     this.emitter.emit('state');
@@ -130,6 +138,7 @@ export class TraceStore {
   private reduce(event: TraceEvent): void {
     if (!event.threadId) return;
     const thread = this.getOrCreateThread(event);
+    if (event.model) this.currentModelByThread.set(event.threadId, event.model);
     thread.updatedAt = event.at;
     if (event.method === 'thread/started') thread.status = 'running';
     if (event.method === 'thread/closed') thread.status = 'completed';
@@ -137,6 +146,7 @@ export class TraceStore {
     if (event.tokenUsage) thread.tokenUsage = event.tokenUsage;
     if (!event.turnId) return;
     const turn = this.getOrCreateTurn(thread, event);
+    turn.model = event.model ?? turn.model ?? this.currentModelByThread.get(event.threadId);
     if (event.tokenUsage) {
       turn.tokenUsage = addTokenUsage(
         turn.tokenUsage,
@@ -173,6 +183,7 @@ export class TraceStore {
       thread.createdAt = history.createdAt;
       thread.turnsLoaded ||= history.turnsLoaded;
       thread.historySource = history.historySource ?? thread.historySource;
+      thread.provider = history.provider ?? thread.provider;
       thread.cwd = history.cwd ?? thread.cwd;
       thread.projectFolder = history.projectFolder ?? thread.projectFolder;
       if (!thread.tokenUsage || (history.tokenUsage?.total.totalTokens ?? -1) >= thread.tokenUsage.total.totalTokens) {
@@ -193,12 +204,14 @@ export class TraceStore {
         turn.startedAt = historicalTurn.startedAt ?? turn.startedAt;
         turn.completedAt = historicalTurn.completedAt ?? turn.completedAt;
         turn.durationMs = historicalTurn.durationMs ?? turn.durationMs;
+        turn.model = historicalTurn.model ?? turn.model;
         if (!turn.tokenUsage || (historicalTurn.tokenUsage?.totalTokens ?? -1) >= turn.tokenUsage.totalTokens) {
           turn.tokenUsage = historicalTurn.tokenUsage ?? turn.tokenUsage;
         }
       }
       for (const input of historicalTurn.items) {
-        const existing = this.findEvent(input);
+        const key = eventKey(input);
+        const existing = turn.items.find((item) => eventKey(item) === key) ?? this.findEvent(input);
         if (existing) {
           Object.assign(existing, input, { seq: existing.seq });
           if (!turn.items.some((item) => item.seq === existing.seq)) turn.items.push(existing);
@@ -208,9 +221,12 @@ export class TraceStore {
         this.state.events.push(event);
         turn.items.push(event);
       }
+      normalizeTurnItems(turn.items);
       trimStart(turn.items, this.limits.itemsPerTurn);
     }
     trimStart(thread.turns, this.limits.turnsPerThread);
+    const latestModel = [...thread.turns].reverse().find((turn) => turn.model)?.model;
+    if (latestModel) this.currentModelByThread.set(thread.id, latestModel);
     trimStart(this.state.events, this.limits.events);
   }
 
@@ -228,6 +244,7 @@ export class TraceStore {
         title: event.summary || `Session ${event.threadId.slice(0, 8)}`,
         status: event.status,
         turnsLoaded: true,
+        provider: event.provider,
         createdAt: event.at,
         updatedAt: event.at,
         turns: [],
@@ -240,7 +257,13 @@ export class TraceStore {
   private getOrCreateTurn(thread: ThreadState, event: TraceEvent): TurnState {
     let turn = thread.turns.find((entry) => entry.id === event.turnId);
     if (!turn) {
-      turn = { id: event.turnId!, status: event.status, startedAt: event.at, items: [] };
+      turn = {
+        id: event.turnId!,
+        status: event.status,
+        startedAt: event.at,
+        model: event.model ?? this.currentModelByThread.get(event.threadId),
+        items: [],
+      };
       thread.turns.push(turn);
       trimStart(thread.turns, this.limits.turnsPerThread);
     }
@@ -250,6 +273,38 @@ export class TraceStore {
 
 function eventKey(event: Pick<TraceEvent, 'method' | 'threadId' | 'turnId' | 'itemId'>): string {
   return `${event.method}\0${event.threadId}\0${event.turnId ?? ''}\0${event.itemId ?? ''}`;
+}
+
+function singleHistoryProvider(threads: HistoricalThread[]): ProviderId | undefined {
+  const providers = new Set(threads.map((thread) => thread.provider).filter((value): value is ProviderId => value !== undefined));
+  return providers.size === 1 ? providers.values().next().value : undefined;
+}
+
+function eventOrderTime(event: Pick<TraceEvent, 'at' | 'startedAt' | 'completedAt'>): number | undefined {
+  for (const value of [event.startedAt, event.at, event.completedAt]) {
+    if (!value) continue;
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function normalizeTurnItems(items: TraceEvent[]): void {
+  const unique = new Map<string, TraceEvent>();
+  for (const item of items) {
+    const key = eventKey(item);
+    const previous = unique.get(key);
+    if (previous) Object.assign(previous, item, { seq: Math.min(previous.seq, item.seq) });
+    else unique.set(key, item);
+  }
+  items.splice(0, items.length, ...unique.values());
+  items.sort((left, right) => {
+    const leftAt = eventOrderTime(left);
+    const rightAt = eventOrderTime(right);
+    return leftAt !== undefined && rightAt !== undefined && leftAt !== rightAt
+      ? leftAt - rightAt
+      : left.seq - right.seq;
+  });
 }
 
 function trimStart<T>(values: T[], limit: number): void {

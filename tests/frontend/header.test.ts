@@ -8,7 +8,7 @@ describe('Header', () => {
     const markup = renderToStaticMarkup(createElement(Header, {
       connection: {
         status: 'connected',
-        userAgent: 'thread-scope/test-client',
+        userAgent: 'takotrace/test-client',
       },
       onSelectThread: () => {},
       onSelectTurn: () => {},
@@ -18,8 +18,10 @@ describe('Header', () => {
     }));
 
     expect(markup).toContain('Connected');
+    expect(markup).toContain('TakoTrace');
+    expect(markup).toContain('class="vbg-custom-brand-mark"');
     expect(markup).toContain('Desktop snapshots · near real-time');
-    expect(markup).toContain('thread-scope/test-client');
+    expect(markup).toContain('takotrace/test-client');
     expect(markup).toContain('class="vbg-custom-topbar__connection"');
     expect(markup).toContain('title="Connection details"');
     expect(markup).not.toContain('vbg-custom-topbar__divider');

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CompactTraceEvent, TraceEvent } from "../types";
 import { formatClockTimeWithMilliseconds } from "../formatters";
-import { eventRaw } from "../trace-event";
+import { eventRaw, timestampMs } from "../trace-event";
 import { asRecord as record, nonEmptyText as text, normalizedToken } from "../value-utils";
 import { EventDetails } from "./EventDetails";
 import { Icon } from "./Icon";
@@ -30,6 +30,7 @@ export interface FlowNode {
   detail: string;
   meta?: string;
   showStatus?: boolean;
+  statusLabel?: string;
   sequenceDirection?: "call" | "return";
 }
 
@@ -145,8 +146,8 @@ export function flowNode(event: FlowEvent): FlowNode {
       sendmessage: "Message",
       followuptask: "Message",
       resumeagent: "Resume",
-      wait: "Join",
-      waitagent: "Join",
+      wait: "Wait",
+      waitagent: "Wait",
       interruptagent: "Interrupt",
       closeagent: "Close",
     } as Record<string, string>)[normalizedTool] ?? tool;
@@ -158,16 +159,21 @@ export function flowNode(event: FlowEvent): FlowNode {
     const receivers = receiverValues.filter((value): value is string => typeof value === "string");
     const name = subagentName(raw);
     const target = name ?? (receivers.length > 1 ? `${receivers.length} subagents` : undefined);
-    const title = action === "Join"
-      ? target ? `Join · ${target}` : "Join subagents"
+    const isWait = action === "Wait";
+    const title = isWait
+      ? `Wait for ${target ?? "subagents"}`
       : target ? `${action} · ${target}` : action;
+    const result = record(raw.result);
+    const resultMessage = text(result.message);
+    const timedOut = result.timed_out === true || result.timedOut === true;
     return {
       kind: "subagent",
       label: action,
       title,
-      detail: text(raw.prompt) ?? (receivers.length ? `Targets: ${receivers.join(", ")}` : fallback),
+      detail: resultMessage ?? text(raw.prompt) ?? (receivers.length ? `Targets: ${receivers.join(", ")}` : fallback),
       meta: text(raw.model) ?? undefined,
       showStatus: true,
+      statusLabel: timedOut ? "Timed out" : isWait && event.status === "completed" ? "Wait ended" : undefined,
       sequenceDirection: "call",
     };
   }
@@ -247,7 +253,13 @@ export function mergeFlowEvents(items: FlowEvent[]): FlowEvent[] {
       durationMs: event.durationMs ?? previous.durationMs,
     } as FlowEvent);
   }
-  return [...merged.values()].sort((left, right) => left.seq - right.seq);
+  return [...merged.values()].sort((left, right) => {
+    const leftAt = timestampMs(left.startedAt) ?? timestampMs(left.at) ?? timestampMs(left.completedAt);
+    const rightAt = timestampMs(right.startedAt) ?? timestampMs(right.at) ?? timestampMs(right.completedAt);
+    return leftAt !== undefined && rightAt !== undefined && leftAt !== rightAt
+      ? leftAt - rightAt
+      : left.seq - right.seq;
+  });
 }
 
 export function flowKindIconName(kind: FlowKind): IconName {
@@ -302,7 +314,7 @@ export function InteractionFlow({ items }: { items: FlowEvent[] }) {
               <EventDetails event={event} fallback={node.detail} />
               <footer>
                 {node.meta && <code>{node.meta}</code>}
-                {node.showStatus && <StatusMark status={event.status} />}
+                {node.showStatus && <StatusMark status={node.statusLabel ?? event.status} />}
                 {event.durationMs !== undefined && <span>{event.durationMs}ms</span>}
               </footer>
             </article>

@@ -3,21 +3,16 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { homedir } from 'node:os';
 import { basename, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { notificationToTrace, threadToHistory } from '../shared/trace.js';
-import { publicHistoricalThread, TraceStore } from '../shared/store.js';
+import { threadToHistory } from '../shared/trace.js';
+import { publicHistoricalThread, sanitizeRaw, TraceStore } from '../shared/store.js';
 import type { TraceEvent } from '../shared/types.js';
-import type { CodexClient } from './codex-client.js';
+import type { TraceProvider, TraceProviderActions } from './provider.js';
 import { openNativePath } from './native-path-opener.js';
+import { resolveSubagentAssignment } from './subagent-assignment.js';
 
-export interface RpcActions {
-  startThread(params?: Record<string, unknown>): Promise<unknown>;
-  resumeThread(threadId: string, params?: Record<string, unknown>): Promise<unknown>;
-  startTurn(threadId: string, text: string, params?: Record<string, unknown>): Promise<unknown>;
-  readThread?(threadId: string): Promise<unknown>;
-  syncThread?(threadId: string): Promise<unknown>;
-}
+export type RpcActions = TraceProviderActions;
 
-export interface ThreadScopeServerOptions {
+export interface TakoTraceServerOptions {
   host?: string;
   port?: number;
   staticDir?: string;
@@ -26,7 +21,7 @@ export interface ThreadScopeServerOptions {
   openPath?: (pathname: string) => Promise<void>;
 }
 
-export class ThreadScopeServer {
+export class TakoTraceServer {
   readonly store: TraceStore;
   private readonly client: RpcActions;
   private readonly host: string;
@@ -35,9 +30,9 @@ export class ThreadScopeServer {
   private readonly visualizationDir: string;
   private readonly openPath: (pathname: string) => Promise<void>;
   private server?: Server;
-  private readonly codexUnsubscribers: Array<() => void> = [];
+  private readonly providerUnsubscribers: Array<() => void> = [];
 
-  constructor(client: RpcActions, options: ThreadScopeServerOptions = {}) {
+  constructor(client: RpcActions, options: TakoTraceServerOptions = {}) {
     this.client = client;
     this.host = options.host ?? '127.0.0.1';
     this.port = options.port ?? 4317;
@@ -47,11 +42,15 @@ export class ThreadScopeServer {
     this.store = options.store ?? new TraceStore();
   }
 
-  attachCodex(client: CodexClient): void {
-    this.codexUnsubscribers.push(
-      client.onNotification((notification) => this.store.add(notificationToTrace(notification))),
-      client.onHistory((threads, replace) => this.store.synchronizeThreads(threads, replace)),
-      client.onError((error) => this.store.setConnection('error', { error: error.message })),
+  attachCodex(client: TraceProvider): void {
+    this.attachProvider(client);
+  }
+
+  attachProvider(provider: TraceProvider): void {
+    this.providerUnsubscribers.push(
+      provider.onTrace((event) => this.store.add(event)),
+      provider.onHistory((threads, replace, source) => this.store.synchronizeThreads(threads, replace, source)),
+      provider.onError((error) => this.store.setConnection('error', { error: error.message })),
     );
   }
 
@@ -71,7 +70,7 @@ export class ThreadScopeServer {
   }
 
   async close(): Promise<void> {
-    for (const unsubscribe of this.codexUnsubscribers.splice(0)) unsubscribe();
+    for (const unsubscribe of this.providerUnsubscribers.splice(0)) unsubscribe();
     if (!this.server) return;
     const server = this.server;
     this.server = undefined;
@@ -172,7 +171,19 @@ export class ThreadScopeServer {
     if (!thread || thread.id !== threadId) {
       return sendError(response, 404, new Error('Subagent session not found'));
     }
-    return sendJson(response, 200, { thread: publicHistoricalThread(thread) });
+    let parentThread: unknown;
+    if (thread.parentThreadId) {
+      try {
+        parentThread = recordValue(await this.client.readThread(thread.parentThreadId)).thread;
+      } catch {
+        // Assignment metadata is optional and must not make an otherwise readable child fail.
+      }
+    }
+    const assignment = resolveSubagentAssignment(threadId, rawThread, parentThread);
+    return sendJson(response, 200, {
+      thread: publicHistoricalThread(thread),
+      assignment: sanitizeRaw(assignment),
+    });
   }
 
   private serveEvents(request: IncomingMessage, response: ServerResponse): void {

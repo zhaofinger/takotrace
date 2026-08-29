@@ -84,7 +84,7 @@ describe('turnSummary', () => {
     expect(markup).not.toContain('<a ');
   });
 
-  it('keeps the thread id on one line with copy and hover affordances', () => {
+  it('renders a one-line session summary with compact details and copy affordances', () => {
     const thread: Thread = {
       id: 'thread-full-id',
       title: 'Thread title',
@@ -101,16 +101,41 @@ describe('turnSummary', () => {
       turns: [],
     }));
 
-    expect(markup).toContain('title="thread-full-id"');
     expect(markup).toContain('aria-label="Copy session ID"');
-    expect(markup).toContain('class="vbg-custom-thread-identity"');
-    expect(markup).toContain('<span>Session</span>');
+    expect(markup).toContain('aria-label="Session details for thread-full-id"');
+    expect(markup).toContain('class="vbg-custom-session-summary"');
+    expect(markup).toContain('<code class="vbg-custom-compact-id" title="thread-full-id">thread-f…</code>');
+    expect(markup).toContain('0 runs');
     expect(markup).toContain('class="vbg-custom-id-copy"');
-    expect(markup).toContain('class="vbg-custom-thread-meta"');
+    expect(markup.indexOf('vbg-custom-session-summary__runs')).toBeLessThan(markup.indexOf('vbg-custom-compact-id'));
+    expect(markup.indexOf('vbg-custom-compact-id')).toBeLessThan(markup.indexOf('aria-label="Copy session ID"'));
+    expect(markup).not.toContain('<span>Session</span>');
+    expect(markup).not.toContain('class="vbg-custom-thread-meta"');
     expect(markup).not.toContain('vbg-custom-thread-code');
     expect(markup).toContain('<main aria-label="Runs"');
     expect(markup).not.toContain('<h2>Runs</h2>');
     expect(markup).toContain('Rollout fallback');
+  });
+
+  it('labels Claude session history sources', () => {
+    const thread: Thread = {
+      id: 'claude-session',
+      title: 'Claude session',
+      status: 'completed',
+      turnsLoaded: true,
+      historySource: 'claude',
+      provider: 'claude',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      turns: [],
+    };
+    const markup = renderToStaticMarkup(createElement(Timeline, {
+      onSelect: () => undefined,
+      thread,
+      turns: [],
+    }));
+
+    expect(markup).toContain('Claude sessions');
   });
 
   it('uses the singular run label for one run', () => {
@@ -135,9 +160,8 @@ describe('turnSummary', () => {
       }],
     }));
 
-    expect(markup).toContain('<dt>Runs</dt><dd aria-label="1 run">1</dd>');
     expect(markup).not.toContain('1 runs');
-    expect(markup.indexOf('vbg-custom-thread-meta')).toBeGreaterThan(markup.indexOf('vbg-custom-timeline__title'));
+    expect(markup).toContain('1 run');
   });
 
   it('shows total tokens and last-request context usage with exact values', () => {
@@ -175,15 +199,14 @@ describe('turnSummary', () => {
       turns: [],
     }));
 
-    expect(markup).toContain('aria-label="Session summary"');
-    expect(markup).toContain('<dt>Runs</dt><dd aria-label="0 runs">0</dd>');
-    expect(markup).toContain('<dt>Tokens</dt>');
-    expect(markup).toContain('aria-label="128,500 total tokens"');
-    expect(markup).toContain('title="128,500 tokens">128.5K</dd>');
-    expect(markup).toContain('<dt>Context</dt>');
-    expect(markup).toContain('aria-label="32,000 of 128,000 context tokens, 25%"');
-    expect(markup).toContain('title="32,000 / 128,000 tokens (25%)"');
-    expect(markup).toContain('>25%</dd>');
+    expect(markup).toContain('aria-label="Session details for thread-token-usage"');
+    expect(markup).toContain('vbg-custom-session-summary__context--normal');
+    expect(markup).toContain('>25%</span>');
+    expect(markup.indexOf('vbg-custom-session-summary__runs')).toBeLessThan(markup.indexOf('vbg-custom-session-summary__context'));
+    expect(markup.indexOf('vbg-custom-session-summary__context')).toBeLessThan(markup.indexOf('vbg-custom-compact-id'));
+    expect(markup).toContain('vbg-custom-context-capacity--normal');
+    expect(markup).toContain('style="width:25%"');
+    expect(markup).not.toContain('128.5K');
     expect(markup).not.toContain('32K / 128K');
   });
 
@@ -203,7 +226,33 @@ describe('turnSummary', () => {
       turns: [],
     }));
 
-    expect(markup).not.toContain('<dt>Tokens</dt>');
+    expect(markup).not.toContain('vbg-custom-session-summary__context');
+  });
+
+  it.each([
+    [80, 'warning', '80%'],
+    [95, 'danger', '95%'],
+    [120, 'danger', '100%'],
+  ])('uses semantic context capacity styling at %i%% usage', (totalTokens, level, trackWidth) => {
+    const usage = tokenUsage(totalTokens);
+    const thread: Thread = {
+      id: `thread-context-${totalTokens}`,
+      title: 'Context capacity',
+      status: 'completed',
+      turnsLoaded: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      tokenUsage: { total: usage, last: usage, modelContextWindow: 100 },
+      turns: [],
+    };
+    const markup = renderToStaticMarkup(createElement(Timeline, {
+      onSelect: () => undefined,
+      thread,
+      turns: [],
+    }));
+
+    expect(markup).toContain(`vbg-custom-context-capacity--${level}`);
+    expect(markup).toContain(`style="width:${trackWidth}"`);
   });
 
   it('does not claim an App Server source before a session is selected', () => {
@@ -233,5 +282,16 @@ function turn(summary: string): Turn {
       summary,
       raw: { type: 'userMessage', text: summary },
     }],
+  };
+}
+
+function tokenUsage(totalTokens: number) {
+  return {
+    inputTokens: totalTokens,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+    totalTokens,
   };
 }

@@ -56,6 +56,13 @@ export function formatClockTimeWithMilliseconds(value: string): string {
     : `${date.toLocaleTimeString([], { hour12: false })}.${String(date.getMilliseconds()).padStart(3, "0")}`;
 }
 
+export function formatDateTimeWithMilliseconds(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (part: number, length = 2) => String(part).padStart(length, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+}
+
 export function formatShortId(value: string): string {
   return value.length > 9 ? `${value.slice(0, 8)}…` : value;
 }

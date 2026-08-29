@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { EventEmitter } from 'node:events';
 import { CodexClient } from '../../src/server/codex-client.js';
+import type { TraceInput } from '../../src/server/provider.js';
 
 describe('CodexClient history sync', () => {
   it('publishes paginated metadata without waiting for full thread reads', async () => {
@@ -51,7 +53,7 @@ describe('CodexClient history sync', () => {
   it('recovers rollout turns before falling back to metadata-only reads', async () => {
     const threadId = '01a03900-5582-7a11-bd8d-a594d4ed8c91';
     const turnId = '01a03900-f4e5-7c61-895b-e5b5dd692d83';
-    const codexHome = await mkdtemp(join(tmpdir(), 'thread-scope-client-'));
+    const codexHome = await mkdtemp(join(tmpdir(), 'takotrace-client-'));
     try {
       const directory = join(codexHome, 'sessions', '2026', '08', '25');
       await mkdir(directory, { recursive: true });
@@ -81,7 +83,7 @@ describe('CodexClient history sync', () => {
   it('best-effort merges rollout token usage into a successful thread/read response', async () => {
     const threadId = '01a03900-5582-7a11-bd8d-a594d4ed8c91';
     const turnId = '01a03900-f4e5-7c61-895b-e5b5dd692d83';
-    const codexHome = await mkdtemp(join(tmpdir(), 'thread-scope-client-'));
+    const codexHome = await mkdtemp(join(tmpdir(), 'takotrace-client-'));
     try {
       const directory = join(codexHome, 'sessions', '2026', '08', '25');
       await mkdir(directory, { recursive: true });
@@ -121,6 +123,33 @@ describe('CodexClient history sync', () => {
     }
   });
 
+  it('best-effort fills missing run models without overriding App Server values', async () => {
+    const threadId = '01a03900-5582-7a11-bd8d-a594d4ed8c91';
+    const turnId = '01a03900-f4e5-7c61-895b-e5b5dd692d83';
+    const codexHome = await mkdtemp(join(tmpdir(), 'takotrace-client-'));
+    try {
+      const directory = join(codexHome, 'sessions', '2026', '08', '25');
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${threadId}.jsonl`), [
+        JSON.stringify({ timestamp: '2026-08-25T12:58:38.000Z', type: 'session_meta', payload: { id: threadId } }),
+        JSON.stringify({ timestamp: '2026-08-25T12:58:39.000Z', type: 'turn_context', payload: { turn_id: turnId, model: 'gpt-5.6-sol' } }),
+        JSON.stringify({ timestamp: '2026-08-25T12:58:40.000Z', type: 'event_msg', payload: { type: 'task_started', turn_id: turnId } }),
+      ].join('\n'));
+      const client = new CodexClient({ codexHome });
+      vi.spyOn(client, 'request')
+        .mockResolvedValueOnce({ thread: { ...thread(threadId, 20), turns: [{ id: turnId, status: 'completed', items: [] }] } })
+        .mockResolvedValueOnce({ thread: { ...thread(threadId, 20), turns: [{ id: turnId, status: 'completed', model: 'app-selected-model', items: [] }] } });
+
+      const filled = await client.readThread(threadId, true) as { thread: { turns: Array<{ model?: string }> } };
+      const preserved = await client.readThread(threadId, true) as { thread: { turns: Array<{ model?: string }> } };
+
+      expect(filled.thread.turns[0].model).toBe('gpt-5.6-sol');
+      expect(preserved.thread.turns[0].model).toBe('app-selected-model');
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
   it("handles fatal syncThread errors gracefully without rejecting", async () => {
     const client = new CodexClient();
     vi.spyOn(client, "readThread").mockRejectedValue(new Error("Network unrecoverable"));
@@ -130,6 +159,26 @@ describe('CodexClient history sync', () => {
     const res = await client.syncThread("fatal-thread");
     expect(res).toEqual({ thread: null });
     expect(snapshots).toEqual([[{ id: "fatal-thread", turnsLoaded: true }]]);
+  });
+
+  it('adapts notifications to provider trace events without changing Codex behavior', () => {
+    const client = new CodexClient();
+    const events: TraceInput[] = [];
+    client.onTrace((event) => events.push(event));
+    const emitter = (client as unknown as { emitter: EventEmitter }).emitter;
+    emitter.emit('notification', {
+      method: 'thread/started',
+      params: { threadId: 'thread-1', type: 'thread' },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      method: 'thread/started',
+      threadId: 'thread-1',
+      type: 'thread',
+      status: 'running',
+      raw: { method: 'thread/started', params: { threadId: 'thread-1', type: 'thread' } },
+    });
   });
 });
 

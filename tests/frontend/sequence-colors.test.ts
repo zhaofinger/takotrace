@@ -32,7 +32,7 @@ describe("sequence semantic colors", () => {
   });
 
   it("uses the selected state alone for keyboard focus", () => {
-    const focusRules = [...styles.matchAll(/\.vbg-custom-sequence__step-row:focus-visible \{([^}]*)\}/g)]
+    const focusRules = [...styles.matchAll(/\.vbg-report \.vbg-custom-sequence__step-row:focus-visible \{([^}]*)\}/g)]
       .map((match) => match[1] ?? "");
     const selectedFocusRule = styles.match(/\.vbg-report \.vbg-custom-sequence__step-row--selected:focus-visible \{([^}]*)\}/)?.[1] ?? "";
 

@@ -9,28 +9,34 @@ import {
 import { createPortal } from "react-dom";
 import { useClipboardCopy } from "../useClipboardCopy";
 import { ExecutionInspector, type ExecutionInspectorItem } from "./ExecutionInspector";
-import { FlowViewToolbar } from "./FlowViewToolbar";
+import type { OpenSubagentHandler } from "./EventDetails";
 import type { FlowEvent } from "./InteractionFlow";
 import { Icon } from "./Icon";
 import { StatusMark } from "./StatusMark";
 import {
   buildSequenceDiagramModel,
   exportMermaidSequence,
+  type SequenceDiagramScope,
   type SequenceParticipant,
   type SequenceStep,
+  type SequenceThreadContext,
 } from "./sequence-diagram-model";
 
-function sequenceInspectorItem(step: SequenceStep): ExecutionInspectorItem {
+function sequenceInspectorItem(
+  step: SequenceStep,
+  participantLabels: Map<SequenceParticipant, string>,
+): ExecutionInspectorItem {
   return {
     seq: step.seq,
     kind: step.node.kind,
-    title: step.detailTitle,
+    title: step.displayTitle,
+    fullTitle: step.detailTitle,
     detail: step.detail,
     status: step.status,
     durationMs: step.durationMs,
     at: step.at,
-    from: step.from,
-    to: step.toLabel ?? step.to,
+    from: participantLabels.get(step.from) ?? step.from,
+    to: step.toLabel ?? participantLabels.get(step.to) ?? step.to,
     type: step.type,
     event: step.event,
   };
@@ -57,16 +63,27 @@ export function nextSequenceStepIndex(
   return null;
 }
 
-export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
-  const [density, setDensity] = useState<"key" | "all">("key");
-  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+export function SequenceDiagram({
+  initialSelectedStepId,
+  items,
+  onOpenSubagent,
+  scope = "main",
+  threadContext,
+}: {
+  initialSelectedStepId?: string;
+  items: FlowEvent[];
+  onOpenSubagent?: OpenSubagentHandler;
+  scope?: SequenceDiagramScope;
+  threadContext?: SequenceThreadContext;
+}) {
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(initialSelectedStepId ?? null);
   const { copy: copyToClipboard, state: copyState } = useClipboardCopy(items, 2_000);
   const [stepTooltip, setStepTooltip] = useState<SequenceStepTooltipState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
 
   const model = useMemo(
-    () => buildSequenceDiagramModel(items, density),
-    [items, density],
+    () => buildSequenceDiagramModel(items, scope, threadContext),
+    [items, scope, threadContext],
   );
 
   const selectedStep = useMemo(
@@ -127,6 +144,11 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
     return map;
   }, [model.participants]);
 
+  const participantLabels = useMemo(
+    () => new Map(model.participants.map((participant) => [participant.key, participant.label])),
+    [model.participants],
+  );
+
   const parallelByStepId = useMemo(() => new Map(
     model.parallelGroups.flatMap((group) => group.stepIds.map((id) => [id, group] as const)),
   ), [model.parallelGroups]);
@@ -147,15 +169,12 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
         }
       }}
     >
-      <FlowViewToolbar
-        checked={density === "all"}
-        className="vbg-custom-sequence__toolbar"
-        label="Show all sequence steps"
-        onChange={(checked) => setDensity(checked ? "all" : "key")}
-        total={model.totalSteps}
-        visible={model.visibleSteps}
-      >
-        <div className="vbg-custom-sequence__actions">
+      {model.steps.length === 0 ? (
+        <div className="vbg-custom-sequence__empty">
+          <p>No sequence events to display for this run.</p>
+        </div>
+      ) : (
+        <div className={`vbg-custom-sequence__workspace${selectedStep ? " vbg-custom-sequence__workspace--with-inspector" : ""}`}>
           <button
             type="button"
             aria-label={copyState === "copied" ? "Mermaid copied" : copyState === "error" ? "Copy Mermaid failed" : "Copy Mermaid"}
@@ -168,15 +187,6 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
               {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy Mermaid"}
             </span>
           </button>
-        </div>
-      </FlowViewToolbar>
-
-      {model.steps.length === 0 ? (
-        <div className="vbg-custom-sequence__empty">
-          <p>No sequence events to display for this run.</p>
-        </div>
-      ) : (
-        <div className={`vbg-custom-sequence__workspace${selectedStep ? " vbg-custom-sequence__workspace--with-inspector" : ""}`}>
           <div
             ref={canvasRef}
             className="vbg-custom-sequence__canvas"
@@ -266,7 +276,7 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
                         aria-expanded={isSelected}
                         aria-controls={isSelected ? "execution-inspector" : undefined}
                         aria-describedby={stepTooltip?.stepId === step.id ? "sequence-step-tooltip" : undefined}
-                        aria-label={`Step ${step.seq}: ${step.label} - ${step.detailTitle}, ${step.from} to ${step.toLabel ?? step.to}${parallelGroup ? `, ${parallelGroup.label}` : ""}`}
+                        aria-label={`Step ${step.seq}: ${step.label} - ${step.detailTitle}, ${participantLabels.get(step.from) ?? step.from} to ${step.toLabel ?? participantLabels.get(step.to) ?? step.to}${parallelGroup ? `, ${parallelGroup.label}` : ""}`}
                         onBlur={() => setStepTooltip(null)}
                         onFocus={(event) => {
                           if (!event.currentTarget.matches(":focus-visible")) return;
@@ -347,8 +357,10 @@ export function SequenceDiagram({ items }: { items: FlowEvent[] }) {
           {selectedStep && (
             <ExecutionInspector
               key={selectedStep.id}
-              item={sequenceInspectorItem(selectedStep)}
+              item={sequenceInspectorItem(selectedStep, participantLabels)}
               onClose={closeInspector}
+              onOpenSubagent={onOpenSubagent}
+              subagentView="sequence"
             />
           )}
         </div>

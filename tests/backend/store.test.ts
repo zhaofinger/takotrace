@@ -54,12 +54,35 @@ describe('TraceStore', () => {
     expect(store.snapshot().threads[0].turns[0].durationMs).toBe(1_950);
   });
 
+  it('preserves a run model across live, compact, detail, and history updates', () => {
+    const store = new TraceStore();
+    store.add({ ...event('turn/started', 'running'), turnId: 'turn-1', model: 'gpt-5.6-sol' });
+
+    expect(store.publicSnapshot().threads[0].turns[0].model).toBe('gpt-5.6-sol');
+    expect(store.getTurn('thread-1', 'turn-1')?.model).toBe('gpt-5.6-sol');
+
+    const history = historyThread();
+    history.id = 'thread-1';
+    history.turns[0].model = 'gpt-5.6-terra';
+    store.synchronizeThreads([history], false);
+
+    expect(store.snapshot().threads[0].turns[0].model).toBe('gpt-5.6-terra');
+  });
+
+  it('applies a live thread model setting to the next run', () => {
+    const store = new TraceStore();
+    store.add({ ...event('thread/settings/updated', 'pending'), model: 'gpt-5.6-terra' });
+    store.add({ ...event('turn/started', 'running'), turnId: 'turn-1' });
+
+    expect(store.getTurn('thread-1', 'turn-1')?.model).toBe('gpt-5.6-terra');
+  });
+
   it('hydrates history and deduplicates a matching live notification', () => {
     const store = new TraceStore();
     store.synchronizeThreads([historyThread()]);
     const before = store.snapshot();
     expect(before.threads[0]).toMatchObject({
-      id: 'history-1', title: 'Saved thread', status: 'pending', cwd: '/Users/example/project', projectFolder: 'project',
+      id: 'history-1', title: 'Saved thread', status: 'completed', cwd: '/Users/example/project', projectFolder: 'project',
     });
     expect(before.threads[0].turns[0].durationMs).toBe(86_400_000);
     expect(before.threads[0].turns[0].items).toHaveLength(1);
@@ -85,6 +108,24 @@ describe('TraceStore', () => {
 
     expect(store.snapshot().events).toHaveLength(1);
     expect(store.snapshot().events[0]).toMatchObject({ seq, summary: 'updated answer' });
+  });
+
+  it('deduplicates repeated history after the global event window evicts older items', () => {
+    const store = new TraceStore({ events: 1, itemsPerTurn: 10 });
+    const thread = historyThread();
+    const historyItems: Array<{ id: string; type: string; status: string; text: string; startedAt?: number }> = [
+      { id: 'final', type: 'agentMessage', status: 'completed', text: 'Done', startedAt: 30 },
+      { id: 'request', type: 'userMessage', status: 'completed', text: 'Start', startedAt: 10 },
+      { id: 'update', type: 'agentMessage', status: 'completed', text: 'Working', startedAt: 20 },
+    ];
+    thread.turns[0].items = historyItems;
+
+    store.synchronizeThreads([thread]);
+    store.synchronizeThreads([thread]);
+
+    const items = store.snapshot().threads[0].turns[0].items;
+    expect(items).toHaveLength(3);
+    expect(items.map((item) => item.itemId)).toEqual(['request', 'update', 'final']);
   });
 
   it('extracts the real user request from an attachment envelope before truncating', () => {
@@ -155,6 +196,19 @@ describe('TraceStore', () => {
 
     expect(store.snapshot().threads[0].tokenUsage?.total.totalTokens).toBe(100);
   });
+
+  it('replaces historical threads independently for each provider', () => {
+    const store = new TraceStore();
+    const codex = { ...historyThread(), id: 'codex-1', provider: 'codex' as const };
+    const claude = { ...historyThread(), id: 'claude-1', provider: 'claude' as const, historySource: 'claude' as const };
+
+    store.synchronizeThreads([codex], true, 'codex');
+    store.synchronizeThreads([claude], true, 'claude');
+    expect(store.snapshot().threads.map((thread) => thread.id).sort()).toEqual(['claude-1', 'codex-1']);
+
+    store.synchronizeThreads([], true, 'codex');
+    expect(store.snapshot().threads.map((thread) => thread.id)).toEqual(['claude-1']);
+  });
 });
 
 function event(method: string, status: 'pending' | 'running' | 'completed' | 'failed', threadId = 'thread-1') {
@@ -167,6 +221,7 @@ function historyThread() {
     createdAt: 1_767_225_600, updatedAt: 1_767_312_000,
     status: { type: 'notLoaded' }, turns: [{
       id: 'turn-1', status: 'completed', startedAt: 1_767_225_600, completedAt: 1_767_312_000, durationMs: 86_400_000,
+      model: 'gpt-5.6-sol',
       items: [{ id: 'item-1', type: 'agentMessage', status: 'completed', text: 'answer' }],
     }],
   };

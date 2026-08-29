@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { ThreadScopeServer, type RpcActions } from '../../src/server/http-server.js';
+import { TakoTraceServer, type RpcActions } from '../../src/server/http-server.js';
 
-describe('ThreadScopeServer', () => {
-  const servers: ThreadScopeServer[] = [];
+describe('TakoTraceServer', () => {
+  const servers: TakoTraceServer[] = [];
   const temporaryPaths: string[] = [];
   afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => server.close()));
@@ -19,7 +19,7 @@ describe('ThreadScopeServer', () => {
       startTurn: vi.fn(async (threadId, text) => ({ turn: { id: 'turn-1' }, threadId, text })),
       syncThread: vi.fn(async (threadId) => ({ thread: { id: threadId } })),
     };
-    const server = new ThreadScopeServer(actions, { port: 0 });
+    const server = new TakoTraceServer(actions, { port: 0 });
     servers.push(server);
     const { host, port } = await server.listen();
     const base = `http://${host}:${port}`;
@@ -44,7 +44,7 @@ describe('ThreadScopeServer', () => {
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const server = new ThreadScopeServer(actions, { port: 0 });
+    const server = new TakoTraceServer(actions, { port: 0 });
     servers.push(server);
     const { host, port } = await server.listen();
     const response = await fetch(`http://${host}:${port}/api/events`);
@@ -75,7 +75,7 @@ describe('ThreadScopeServer', () => {
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const server = new ThreadScopeServer(actions, { port: 0 });
+    const server = new TakoTraceServer(actions, { port: 0 });
     servers.push(server);
     const { host, port } = await server.listen();
     const response = await fetch(`http://${host}:${port}/api/threads/t/turns`, { method: 'POST', body: '{}' });
@@ -105,6 +105,7 @@ describe('ThreadScopeServer', () => {
           source: { subAgent: { thread_spawn: { depth: 1, agent_path: '/root/backend' } } },
           turns: Array.from({ length: 101 }, (_, turnIndex) => ({
             id: `turn-${turnIndex}`,
+            model: turnIndex === 100 ? 'gpt-5.6-sol' : undefined,
             status: 'completed',
             items: Array.from({ length: turnIndex === 100 ? 501 : 1 }, (_value, itemIndex) => ({
               id: `item-${itemIndex}`,
@@ -116,7 +117,7 @@ describe('ThreadScopeServer', () => {
         },
       })),
     };
-    const server = new ThreadScopeServer(actions, { port: 0 });
+    const server = new TakoTraceServer(actions, { port: 0 });
     servers.push(server);
     const { host, port } = await server.listen();
     const base = `http://${host}:${port}`;
@@ -128,7 +129,7 @@ describe('ThreadScopeServer', () => {
         agentPath: string;
         depth: number;
         turnsLoaded: boolean;
-        turns: Array<{ id: string; items: Array<{ itemId: string; raw: { text: string } }> }>;
+        turns: Array<{ id: string; model?: string; items: Array<{ itemId: string; raw: { text: string } }> }>;
       };
     };
     expect(actions.readThread).toHaveBeenCalledWith('child thread');
@@ -138,13 +139,14 @@ describe('ThreadScopeServer', () => {
     expect(detail.thread.turns).toHaveLength(100);
     expect(detail.thread.turns[0].id).toBe('turn-1');
     expect(detail.thread.turns[99].items).toHaveLength(500);
+    expect(detail.thread.turns[99].model).toBe('gpt-5.6-sol');
     expect(detail.thread.turns[99].items[0].itemId).toBe('item-1');
     expect(detail.thread.turns[99].items[499].raw.text).toContain('[truncated ');
     expect(server.store.snapshot().threads).toEqual([]);
   });
 
   it('returns explicit errors when subagent details are missing or unavailable', async () => {
-    const unavailable = new ThreadScopeServer({
+    const unavailable = new TakoTraceServer({
       startThread: async () => ({}), resumeThread: async () => ({}), startTurn: async () => ({}),
     }, { port: 0 });
     servers.push(unavailable);
@@ -153,7 +155,7 @@ describe('ThreadScopeServer', () => {
     expect(unavailableResponse.status).toBe(501);
     expect(await unavailableResponse.json()).toEqual({ error: { message: 'Subagent session details are unavailable' } });
 
-    const missing = new ThreadScopeServer({
+    const missing = new TakoTraceServer({
       startThread: async () => ({}), resumeThread: async () => ({}), startTurn: async () => ({}),
       readThread: async () => ({ thread: null }),
     }, { port: 0 });
@@ -164,13 +166,73 @@ describe('ThreadScopeServer', () => {
     expect(await missingResponse.json()).toEqual({ error: { message: 'Subagent session not found' } });
   });
 
+  it('returns the matched assignment and tolerates unavailable parent details', async () => {
+    const parentPromptActions: RpcActions = {
+      startThread: async () => ({}), resumeThread: async () => ({}), startTurn: async () => ({}),
+      readThread: vi.fn(async (threadId) => ({
+        thread: threadId === 'child'
+          ? {
+              id: 'child', parentThreadId: 'parent', status: { type: 'idle' }, createdAt: 1, updatedAt: 2,
+              turns: [],
+            }
+          : {
+              id: 'parent', status: { type: 'idle' }, createdAt: 1, updatedAt: 2,
+              turns: [{ id: 'turn', items: [
+                {
+                  id: 'spawn', type: 'collabAgentToolCall', tool: 'spawnAgent',
+                  receiverThreadIds: ['child'], prompt: 'Implement assignment lookup',
+                },
+                {
+                  id: 'activity', type: 'subAgentActivity', agentThreadId: 'child',
+                  arguments: { task_name: 'backend', agent_type: 'worker', fork_turns: 'all' },
+                },
+              ] }],
+            },
+      })),
+    };
+    const withParent = new TakoTraceServer(parentPromptActions, { port: 0 });
+    servers.push(withParent);
+    const parentAddress = await withParent.listen();
+    const detail = await json(`http://${parentAddress.host}:${parentAddress.port}/api/subagents/child`) as {
+      assignment: Record<string, unknown>;
+    };
+    expect(detail.assignment).toEqual({
+      availability: 'available', text: 'Implement assignment lookup', source: 'parent-prompt',
+      taskName: 'backend', agentType: 'worker', forkTurns: 'all',
+    });
+    expect(parentPromptActions.readThread).toHaveBeenNthCalledWith(1, 'child');
+    expect(parentPromptActions.readThread).toHaveBeenNthCalledWith(2, 'parent');
+
+    const parentFailureActions: RpcActions = {
+      startThread: async () => ({}), resumeThread: async () => ({}), startTurn: async () => ({}),
+      readThread: vi.fn(async (threadId) => {
+        if (threadId === 'parent') throw new Error('parent unavailable');
+        return {
+          thread: {
+            id: 'child', parentThreadId: 'parent', status: { type: 'idle' }, createdAt: 1, updatedAt: 2,
+            turns: [],
+          },
+        };
+      }),
+    };
+    const withoutParent = new TakoTraceServer(parentFailureActions, { port: 0 });
+    servers.push(withoutParent);
+    const failureAddress = await withoutParent.listen();
+    const fallback = await json(`http://${failureAddress.host}:${failureAddress.port}/api/subagents/child`) as {
+      thread: { id: string };
+      assignment: Record<string, unknown>;
+    };
+    expect(fallback.thread.id).toBe('child');
+    expect(fallback.assignment).toEqual({ availability: 'not-recorded' });
+  });
+
   it('serves compact state and a bounded full turn detail', async () => {
     const actions: RpcActions = {
       startThread: async () => ({}),
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const server = new ThreadScopeServer(actions, { port: 0 });
+    const server = new TakoTraceServer(actions, { port: 0 });
     servers.push(server);
     const largeRaw = 'x'.repeat(50_000);
     server.store.add({
@@ -209,7 +271,7 @@ describe('ThreadScopeServer', () => {
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const root = await mkdtemp(join(tmpdir(), 'thread-scope-visualizations-'));
+    const root = await mkdtemp(join(tmpdir(), 'takotrace-visualizations-'));
     temporaryPaths.push(root);
     const nested = join(root, 'thread');
     await mkdir(nested);
@@ -220,7 +282,7 @@ describe('ThreadScopeServer', () => {
     const outside = join(root, '..', `outside-${basename(root)}.png`);
     await writeFile(outside, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     temporaryPaths.push(outside);
-    const server = new ThreadScopeServer(actions, { port: 0, visualizationDir: root });
+    const server = new TakoTraceServer(actions, { port: 0, visualizationDir: root });
     servers.push(server);
     const { host, port } = await server.listen();
     const base = `http://${host}:${port}/api/visualization?path=`;
@@ -240,11 +302,11 @@ describe('ThreadScopeServer', () => {
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const root = await mkdtemp(join(tmpdir(), 'thread-scope-attachment-'));
+    const root = await mkdtemp(join(tmpdir(), 'takotrace-attachment-'));
     temporaryPaths.push(root);
     const image = join(root, 'prompt.png');
     await writeFile(image, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    const server = new ThreadScopeServer(actions, { port: 0 });
+    const server = new TakoTraceServer(actions, { port: 0 });
     servers.push(server);
     server.store.add({
       method: 'item/completed',
@@ -282,7 +344,7 @@ describe('ThreadScopeServer', () => {
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const root = await mkdtemp(join(tmpdir(), 'thread-scope-local-files-'));
+    const root = await mkdtemp(join(tmpdir(), 'takotrace-local-files-'));
     temporaryPaths.push(root);
     const skill = join(root, 'SKILL.md');
     await writeFile(skill, '# Local skill\n<script>alert(1)</script>');
@@ -291,7 +353,7 @@ describe('ThreadScopeServer', () => {
     const outside = join(root, '..', `outside-${basename(root)}.md`);
     await writeFile(outside, '# Private');
     temporaryPaths.push(outside);
-    const server = new ThreadScopeServer(actions, { port: 0 });
+    const server = new TakoTraceServer(actions, { port: 0 });
     servers.push(server);
     const { host, port } = await server.listen();
     const base = `http://${host}:${port}/api/source?ref=`;
@@ -322,14 +384,14 @@ describe('ThreadScopeServer', () => {
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const root = await mkdtemp(join(tmpdir(), 'thread-scope-open-path-'));
+    const root = await mkdtemp(join(tmpdir(), 'takotrace-open-path-'));
     temporaryPaths.push(root);
     const artifact = join(root, 'artifact.html');
     await writeFile(artifact, '<!doctype html><title>Artifact</title>');
     const unsupported = join(root, 'artifact.bin');
     await writeFile(unsupported, 'binary');
     const openPath = vi.fn(async () => {});
-    const server = new ThreadScopeServer(actions, { port: 0, openPath });
+    const server = new TakoTraceServer(actions, { port: 0, openPath });
     servers.push(server);
     const { host, port } = await server.listen();
     const base = `http://${host}:${port}`;
@@ -368,12 +430,12 @@ describe('ThreadScopeServer', () => {
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const root = await mkdtemp(join(tmpdir(), 'thread-scope-open-path-origin-'));
+    const root = await mkdtemp(join(tmpdir(), 'takotrace-open-path-origin-'));
     temporaryPaths.push(root);
     const artifact = join(root, 'artifact.html');
     await writeFile(artifact, '<!doctype html>');
     const openPath = vi.fn(async () => {});
-    const server = new ThreadScopeServer(actions, { port: 0, openPath });
+    const server = new TakoTraceServer(actions, { port: 0, openPath });
     servers.push(server);
     const { host, port } = await server.listen();
     const endpoint = `http://${host}:${port}/api/host.openPath`;
@@ -404,11 +466,11 @@ describe('ThreadScopeServer', () => {
       resumeThread: async () => ({}),
       startTurn: async () => ({}),
     };
-    const root = await mkdtemp(join(tmpdir(), 'thread-scope-open-path-error-'));
+    const root = await mkdtemp(join(tmpdir(), 'takotrace-open-path-error-'));
     temporaryPaths.push(root);
     const artifact = join(root, 'artifact.html');
     await writeFile(artifact, '<!doctype html>');
-    const server = new ThreadScopeServer(actions, {
+    const server = new TakoTraceServer(actions, {
       port: 0,
       openPath: async () => { throw new Error('native opener failed'); },
     });

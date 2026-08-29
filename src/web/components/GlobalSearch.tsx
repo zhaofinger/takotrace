@@ -97,9 +97,9 @@ export function GlobalSearch({
   const hasResults = results.threads.length > 0 || results.turns.length > 0;
   const optionCount = results.threads.length + results.turns.length;
   const isOpen = isFocused && hasQuery;
-  const resultsId = `threadscope-global-search-results-${componentId}`;
-  const sessionsHeadingId = `threadscope-global-search-sessions-${componentId}`;
-  const runsHeadingId = `threadscope-global-search-runs-${componentId}`;
+  const resultsId = `takotrace-global-search-results-${componentId}`;
+  const sessionsHeadingId = `takotrace-global-search-sessions-${componentId}`;
+  const runsHeadingId = `takotrace-global-search-runs-${componentId}`;
   const optionId = (index: number) => `${resultsId}-option-${index}`;
 
   useEffect(() => setActiveIndex(-1), [results]);

@@ -1,4 +1,4 @@
-import type { AppState, SnapshotEvent, ThreadDetail, TraceEvent, Turn } from "./types";
+import type { AppState, SnapshotEvent, SubagentDetail, TraceEvent, Turn } from "./types";
 
 export async function fetchState(signal?: AbortSignal): Promise<AppState> {
   const response = await fetch("/api/state", { signal });
@@ -33,13 +33,12 @@ export async function fetchTurnDetail(
   return "turn" in payload ? payload.turn : payload;
 }
 
-export async function fetchSubagentThread(threadId: string): Promise<ThreadDetail> {
+export async function fetchSubagentThread(threadId: string): Promise<SubagentDetail> {
   const response = await fetch(`/api/subagents/${encodeURIComponent(threadId)}`);
   if (!response.ok) {
     throw new Error(await responseErrorMessage(response, `Subagent request failed (${response.status})`));
   }
-  const payload = await response.json() as { thread: ThreadDetail };
-  return payload.thread;
+  return response.json() as Promise<SubagentDetail>;
 }
 
 async function responseErrorMessage(response: Response, fallback: string): Promise<string> {

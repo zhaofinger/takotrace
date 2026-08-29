@@ -1,5 +1,6 @@
 export function ExecutionMetaSummary({
   duration,
+  durationLabel = "Duration",
   from,
   startedAt,
   startedAtLabel,
@@ -7,34 +8,39 @@ export function ExecutionMetaSummary({
   type,
 }: {
   duration?: string;
-  from: string;
+  durationLabel?: string;
+  from?: string;
   startedAt: string;
   startedAtLabel: string;
-  to: string;
-  type: string;
+  to?: string;
+  type?: string;
 }) {
+  const hasDirection = Boolean(from && to);
   return (
-    <section aria-label={`Execution from ${from} to ${to}`} className="vbg-custom-execution-meta">
-      <div className="vbg-custom-execution-meta__primary">
-        <div className="vbg-custom-execution-meta__eyebrow">
-          <span>Direction</span>
-          <span className="vbg-custom-execution-meta__type">{type}</span>
-        </div>
-        <div className="vbg-custom-execution-meta__route">
-          <code title={from}>{from}</code>
-          <span aria-hidden="true" className="vbg-custom-execution-meta__arrow">→</span>
-          <code title={to}>{to}</code>
-        </div>
-      </div>
+    <section aria-label={hasDirection ? `Execution from ${from} to ${to}` : "Execution timing"} className="vbg-custom-execution-meta">
       <dl className="vbg-custom-execution-meta__facts">
         <div>
           <dt>Started</dt>
           <dd><time dateTime={startedAt}>{startedAtLabel}</time></dd>
         </div>
-        {duration && (
+        <div>
+          <dt>{durationLabel}</dt>
+          <dd>{duration ?? "Not recorded"}</dd>
+        </div>
+        {hasDirection && (
           <div>
-            <dt>Duration</dt>
-            <dd>{duration}</dd>
+            <dt>Direction</dt>
+            <dd className="vbg-custom-execution-meta__route">
+              <code title={from}>{from}</code>
+              <span aria-hidden="true" className="vbg-custom-execution-meta__arrow">→</span>
+              <code title={to}>{to}</code>
+            </dd>
+          </div>
+        )}
+        {type && (
+          <div>
+            <dt>Type</dt>
+            <dd><span className="vbg-custom-execution-meta__type">{type}</span></dd>
           </div>
         )}
       </dl>

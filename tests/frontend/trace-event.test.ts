@@ -23,6 +23,19 @@ describe("trace event utilities", () => {
     expect(normalizedEventType(value)).toBe("mcptoolcall");
   });
 
+  it("treats Claude canonical items as their own raw payload", () => {
+    const value = event({
+      provider: "claude",
+      raw: { type: "agentMessage", text: "hello", sessionMessage: { type: "assistant", uuid: "a-1" } },
+    });
+    expect(eventRaw(value)).toEqual({
+      type: "agentMessage",
+      text: "hello",
+      sessionMessage: { type: "assistant", uuid: "a-1" },
+    });
+    expect(normalizedEventType(value)).toBe("agentmessage");
+  });
+
   it("falls back safely for compact events and malformed raw values", () => {
     const compact = { ...event({ type: "User-Message" }) } as Omit<TraceEvent, "raw"> & { raw?: never };
     delete (compact as { raw?: unknown }).raw;

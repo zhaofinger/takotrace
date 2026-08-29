@@ -1,5 +1,5 @@
 import type {
-  EntityStatus, HistoricalThread, RpcNotification, ThreadTokenUsage, TokenUsageBreakdown, TraceEvent,
+  EntityStatus, HistoricalThread, ProviderId, RpcNotification, ThreadTokenUsage, TokenUsageBreakdown, TraceEvent,
 } from './types.js';
 
 type RecordValue = Record<string, unknown>;
@@ -48,7 +48,8 @@ function extractUserRequest(text: string): string {
 
 function eventStatus(method: string, params: unknown): EntityStatus {
   const explicit = stringAt(params, ['status'], ['turn', 'status'], ['item', 'status']);
-  if (explicit === 'failed' || explicit === 'error' || explicit === 'cancelled') return 'failed';
+  if (explicit === 'failed' || explicit === 'error' || explicit === 'cancelled' || explicit === 'systemError') return 'failed';
+  if (explicit === 'interrupted') return 'interrupted';
   if (explicit === 'inProgress' || explicit === 'running') return 'running';
   if (explicit === 'completed' || explicit === 'approved') return 'completed';
   if (method.endsWith('/completed')) return 'completed';
@@ -58,7 +59,8 @@ function eventStatus(method: string, params: unknown): EntityStatus {
 
 function entityStatus(value: unknown): EntityStatus {
   if (value && typeof value === 'object') return entityStatus(record(value).type);
-  if (value === 'failed' || value === 'error' || value === 'cancelled') return 'failed';
+  if (value === 'failed' || value === 'error' || value === 'cancelled' || value === 'systemError') return 'failed';
+  if (value === 'interrupted') return 'interrupted';
   if (value === 'inProgress' || value === 'running' || value === 'active') return 'running';
   if (value === 'completed' || value === 'complete' || value === 'approved' || value === 'idle') return 'completed';
   return 'pending';
@@ -133,6 +135,10 @@ function subagentSpawnSource(value: unknown): RecordValue {
   return record(subagent.thread_spawn ?? subagent.threadSpawn);
 }
 
+function threadProvider(value: unknown): ProviderId | undefined {
+  return record(value).provider === 'claude' ? 'claude' : undefined;
+}
+
 export function notificationToTrace(notification: RpcNotification): Omit<TraceEvent, 'seq'> {
   const params = notification.params;
   const method = notification.method;
@@ -166,6 +172,15 @@ export function notificationToTrace(notification: RpcNotification): Omit<TraceEv
     parentItemId: stringAt(params, ['parentItemId'], ['parent_item_id'], ['item', 'parentItemId'], ['item', 'parent_id']),
     summary: summaryFor(method, params),
     durationMs: numberAt(params, ['item', 'durationMs'], ['turn', 'durationMs']),
+    model: stringAt(
+      params,
+      ['model'],
+      ['turn', 'model'],
+      ['turn', 'modelName'],
+      ['turn', 'model_name'],
+      ['threadSettings', 'model'],
+      ['thread_settings', 'model'],
+    ),
     tokenUsage,
     raw: notification,
   };
@@ -175,6 +190,7 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
   const thread = record(value);
   const id = stringAt(thread, ['id']);
   if (!id) return undefined;
+  const provider = threadProvider(thread);
   const createdAt = isoAt(thread.createdAt, new Date().toISOString());
   const updatedAt = isoAt(thread.updatedAt, createdAt);
   const cwd = stringAt(thread, ['cwd'], ['cwd', 'path']);
@@ -188,17 +204,62 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
     ?? nullableString(spawnSource.agent_path)
     ?? nullableString(spawnSource.agentPath);
   const tokenUsage = normalizeThreadTokenUsage(thread.tokenUsage ?? thread.token_usage);
+  const turns = rawTurns.flatMap((rawTurn) => {
+    const turn = record(rawTurn);
+    const turnId = stringAt(turn, ['id']);
+    if (!turnId) return [];
+    const status = entityStatus(turn.status);
+    const startedAt = typeof turn.startedAt === 'number' ? isoAt(turn.startedAt, createdAt) : undefined;
+    const completedAt = typeof turn.completedAt === 'number' ? isoAt(turn.completedAt, updatedAt) : undefined;
+    const durationMs = numberAt(turn, ['durationMs']);
+    const model = stringAt(turn, ['model'], ['modelName'], ['model_name']);
+    const tokenUsage = normalizeTokenUsageBreakdown(turn.tokenUsage ?? turn.token_usage);
+    const at = completedAt ?? startedAt ?? updatedAt;
+    const rawItems = Array.isArray(turn.items) ? turn.items : [];
+    const items = rawItems.flatMap((rawItem): Array<Omit<TraceEvent, 'seq'>> => {
+      const item = record(rawItem);
+      const itemId = stringAt(item, ['id']);
+      if (!itemId) return [];
+      const type = stringAt(item, ['type']) ?? 'item';
+      const returnedMessage = type.toLowerCase() === 'agentmessage' && stringAt(item, ['text']) !== undefined;
+      const itemStatus = returnedMessage && item.status === undefined ? 'completed' : entityStatus(item.status);
+      const finalStatus = itemStatus === 'pending' ? status : itemStatus;
+      const method = ['completed', 'interrupted', 'failed'].includes(finalStatus) ? 'item/completed' : 'item/started';
+      const itemStartedAt = typeof item.startedAt === 'number' ? isoAt(item.startedAt, at) : undefined;
+      const itemCompletedAt = typeof item.completedAt === 'number' ? isoAt(item.completedAt, at) : undefined;
+      return [{
+        at: itemCompletedAt ?? itemStartedAt ?? at,
+        startedAt: itemStartedAt,
+        completedAt: itemCompletedAt,
+        method,
+        type,
+        status: finalStatus,
+        threadId: id,
+        turnId,
+        itemId,
+        parentItemId: stringAt(item, ['parentItemId'], ['parent_id']),
+        provider,
+        summary: summaryFor(method, { item }),
+        durationMs: numberAt(item, ['durationMs']),
+        raw: rawItem,
+      }];
+    });
+    return [{ id: turnId, status, startedAt, completedAt, durationMs, model, tokenUsage, items }];
+  });
+  const declaredStatus = entityStatus(thread.status);
+  const shouldDeriveStatus = record(thread.status).type === 'notLoaded';
   return {
     id,
     sessionId: stringAt(thread, ['sessionId']),
     forkedFromId: nullableString(thread.forkedFromId),
     parentThreadId,
     title: stringAt(thread, ['name'], ['preview']) ?? `Session ${id.slice(0, 8)}`,
-    status: entityStatus(thread.status),
+    status: shouldDeriveStatus && turns.length ? turns[turns.length - 1].status : declaredStatus,
     turnsLoaded: thread.turnsLoaded === true,
     historySource: thread.historySource === 'rollout-file' || thread.historySource === 'app-server'
       ? thread.historySource
-      : undefined,
+      : (thread.historySource === 'claude' ? 'claude' : undefined),
+    provider,
     createdAt,
     updatedAt,
     cwd,
@@ -214,43 +275,6 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
     agentPath,
     depth: numberAt(thread, ['depth']) ?? numberAt(spawnSource, ['depth']),
     tokenUsage,
-    turns: rawTurns.flatMap((rawTurn) => {
-      const turn = record(rawTurn);
-      const turnId = stringAt(turn, ['id']);
-      if (!turnId) return [];
-      const status = entityStatus(turn.status);
-      const startedAt = typeof turn.startedAt === 'number' ? isoAt(turn.startedAt, createdAt) : undefined;
-      const completedAt = typeof turn.completedAt === 'number' ? isoAt(turn.completedAt, updatedAt) : undefined;
-      const durationMs = numberAt(turn, ['durationMs']);
-      const tokenUsage = normalizeTokenUsageBreakdown(turn.tokenUsage ?? turn.token_usage);
-      const at = completedAt ?? startedAt ?? updatedAt;
-      const rawItems = Array.isArray(turn.items) ? turn.items : [];
-      const items = rawItems.flatMap((rawItem): Array<Omit<TraceEvent, 'seq'>> => {
-        const item = record(rawItem);
-        const itemId = stringAt(item, ['id']);
-        if (!itemId) return [];
-        const itemStatus = entityStatus(item.status);
-        const finalStatus = itemStatus === 'pending' ? (status === 'completed' ? 'completed' : status) : itemStatus;
-        const method = finalStatus === 'completed' || finalStatus === 'failed' ? 'item/completed' : 'item/started';
-        const itemStartedAt = typeof item.startedAt === 'number' ? isoAt(item.startedAt, at) : undefined;
-        const itemCompletedAt = typeof item.completedAt === 'number' ? isoAt(item.completedAt, at) : undefined;
-        return [{
-          at: itemCompletedAt ?? itemStartedAt ?? at,
-          startedAt: itemStartedAt,
-          completedAt: itemCompletedAt,
-          method,
-          type: stringAt(item, ['type']) ?? 'item',
-          status: finalStatus,
-          threadId: id,
-          turnId,
-          itemId,
-          parentItemId: stringAt(item, ['parentItemId'], ['parent_id']),
-          summary: summaryFor(method, { item }),
-          durationMs: numberAt(item, ['durationMs']),
-          raw: rawItem,
-        }];
-      });
-      return [{ id: turnId, status, startedAt, completedAt, durationMs, tokenUsage, items }];
-    }),
+    turns,
   };
 }

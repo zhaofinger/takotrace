@@ -1,2 +1,3 @@
 export { CodexClient } from './codex-client.js';
-export { ThreadScopeServer } from './http-server.js';
+export { ClaudeClient } from './claude-client.js';
+export { TakoTraceServer } from './http-server.js';

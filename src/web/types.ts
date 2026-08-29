@@ -10,6 +10,8 @@ export type TraceStatus =
   | "disconnected"
   | string;
 
+export type SessionProvider = "codex" | "claude";
+
 export interface TokenUsageBreakdown {
   totalTokens: number;
   inputTokens: number;
@@ -41,6 +43,8 @@ export interface TraceEvent {
   parentItemId?: string;
   summary: string;
   durationMs?: number;
+  model?: string;
+  provider?: "codex" | "claude";
   raw: unknown;
 }
 
@@ -52,6 +56,7 @@ export interface Turn {
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;
+  model?: string;
   tokenUsage?: TokenUsageBreakdown;
   items: TraceEvent[];
 }
@@ -68,7 +73,8 @@ export interface Thread {
   cwd?: string;
   status: TraceStatus;
   turnsLoaded: boolean;
-  historySource?: "app-server" | "rollout-file";
+  historySource?: "app-server" | "rollout-file" | "claude";
+  provider?: "codex" | "claude";
   createdAt: string;
   updatedAt: string;
   tokenUsage?: ThreadTokenUsage;
@@ -82,7 +88,8 @@ export interface ThreadDetail {
   projectFolder?: string;
   status: TraceStatus;
   turnsLoaded?: boolean;
-  historySource?: "app-server" | "rollout-file";
+  historySource?: "app-server" | "rollout-file" | "claude";
+  provider?: "codex" | "claude";
   createdAt: string;
   updatedAt: string;
   turns: Turn[];
@@ -95,8 +102,25 @@ export interface ThreadDetail {
   modelProvider?: string;
 }
 
+export type SubagentAssignmentAvailability = "available" | "encrypted" | "not-recorded";
+
+export interface SubagentAssignment {
+  availability: SubagentAssignmentAvailability;
+  text?: string;
+  source?: string;
+  taskName?: string;
+  agentType?: string;
+  forkTurns?: string;
+}
+
+export interface SubagentDetail {
+  thread: ThreadDetail;
+  assignment: SubagentAssignment;
+}
+
 export interface ConnectionState {
   status: string;
+  provider?: "codex" | "claude" | "all";
   userAgent?: string;
   error?: string;
 }

@@ -90,6 +90,6 @@ describe('GlobalSearch keyboard accessibility', () => {
     expect(markup).toContain('aria-autocomplete="list"');
     expect(markup).toContain('aria-haspopup="listbox"');
     expect(markup).toContain('aria-expanded="false"');
-    expect(markup).toContain('aria-controls="threadscope-global-search-results-');
+    expect(markup).toContain('aria-controls="takotrace-global-search-results-');
   });
 });

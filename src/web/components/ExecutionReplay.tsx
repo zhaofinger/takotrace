@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatClockTime as formatTime, formatCompactDuration as formatDuration } from "../formatters";
 import { timestampMs as timestamp } from "../trace-event";
-import { EventDetails } from "./EventDetails";
+import { EventDetails, type OpenSubagentHandler } from "./EventDetails";
 import { ExecutionInspector, type ExecutionInspectorItem } from "./ExecutionInspector";
-import { FlowViewToolbar } from "./FlowViewToolbar";
 import { flowKindIconName } from "./InteractionFlow";
 import type { FlowEvent, FlowKind } from "./InteractionFlow";
 import { Icon } from "./Icon";
@@ -14,7 +13,8 @@ import {
   replayGroupStatus,
   traceReplayModel,
 } from "./trace-replay-model";
-import type { ReplayAction, ReplayDensity, ReplayTimingMode } from "./trace-replay-model";
+import type { ReplayAction, ReplayTimingMode } from "./trace-replay-model";
+import { compactShellCommand } from "./sequence-diagram-model";
 import { parallelEvidenceLabel } from "./parallel-execution-model";
 
 type ReplayTimeScale = "actual" | "logical";
@@ -47,10 +47,13 @@ const OVERVIEW_MARKER_WIDTH = 0.8;
 const OVERVIEW_TRACK_PITCH = 8;
 
 function replayInspectorItem(action: ReplayAction): ExecutionInspectorItem {
+  const isShellCommand = action.kind === "tool" && action.title.startsWith("Shell ·");
+  const cwd = action.meta?.split(" · ", 1)[0];
   return {
     seq: action.event.seq,
     kind: action.kind,
-    title: action.title,
+    title: isShellCommand ? compactShellCommand(action.detail, cwd) : action.title,
+    fullTitle: isShellCommand ? action.detail : action.title,
     detail: action.detail,
     status: action.status,
     durationMs: action.durationMs,
@@ -359,7 +362,7 @@ function ExecutionGroup({
                       className="vbg-custom-replay-action__duration"
                     >{formatDuration(renderedDurationMs)}</time>
                   )}
-                  <StatusMark label={false} status={item.status} />
+                  <StatusMark label={false} status={item.statusLabel ?? item.status} />
               </button>
             </li>
           );
@@ -369,11 +372,18 @@ function ExecutionGroup({
   );
 }
 
-export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
-  const [density, setDensity] = useState<ReplayDensity>("key");
-  const [selectedId, setSelectedId] = useState<string>();
+export default function ExecutionReplay({
+  initialSelectedId,
+  items,
+  onOpenSubagent,
+}: {
+  initialSelectedId?: string;
+  items: FlowEvent[];
+  onOpenSubagent?: OpenSubagentHandler;
+}) {
+  const [selectedId, setSelectedId] = useState<string | undefined>(initialSelectedId);
   const streamRef = useRef<HTMLOListElement>(null);
-  const model = useMemo(() => traceReplayModel(items, density), [density, items]);
+  const model = useMemo(() => traceReplayModel(items), [items]);
   const overview = useMemo(() => overviewItems(model), [model]);
   const selectedAction = useMemo(() => model.blocks
     .flatMap((block) => block.type === "execution" ? block.actions : [])
@@ -447,14 +457,6 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
       }}
     >
       <div className="vbg-custom-replay-head">
-        <FlowViewToolbar
-          checked={density === "all"}
-          className="vbg-custom-replay-toolbar"
-          label="Show all replay events"
-          onChange={(checked) => setDensity(checked ? "all" : "key")}
-          total={model.total}
-          visible={model.visible}
-        />
         <ReplayOverview items={overview} onSelect={selectOverviewItem} scale={effectiveScale} selectedId={selectedId} />
       </div>
       <div className={`vbg-custom-replay-workspace${selectedAction ? " vbg-custom-replay-workspace--with-inspector" : ""}`}>
@@ -477,7 +479,7 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
                   <time dateTime={block.event.at}>{formatTime(block.event.at)}</time>
                   <StatusMark label={false} status={block.event.status} />
                 </header>
-                <EventDetails event={block.event} fallback={block.node.detail} />
+                <EventDetails event={block.event} fallback={block.node.detail} onOpenSubagent={onOpenSubagent} subagentView="trace" />
               </article>
             </li>
           ))}
@@ -487,6 +489,8 @@ export default function ExecutionReplay({ items }: { items: FlowEvent[] }) {
             key={selectedAction.id}
             item={replayInspectorItem(selectedAction)}
             onClose={closeInspector}
+            onOpenSubagent={onOpenSubagent}
+            subagentView="trace"
           />
         )}
       </div>

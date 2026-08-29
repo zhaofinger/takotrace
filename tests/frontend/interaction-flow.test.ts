@@ -69,9 +69,14 @@ describe("interaction flow", () => {
       sequenceDirection: "return",
     });
 
-    expect(flowNode(event("collabAgentToolCall", { tool: "wait" }))).toMatchObject({
-      label: "Join",
-      title: "Join subagents",
+    expect(flowNode(event("collabAgentToolCall", {
+      tool: "wait",
+      result: { message: "Wait timed out.", timed_out: true },
+    }))).toMatchObject({
+      label: "Wait",
+      title: "Wait for subagents",
+      detail: "Wait timed out.",
+      statusLabel: "Timed out",
       sequenceDirection: "call",
     });
   });

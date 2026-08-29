@@ -6,6 +6,9 @@ export type TraceLikeEvent = CompactTraceEvent | TraceEvent;
 export function eventRaw(event: TraceLikeEvent): UnknownRecord {
   if (!("raw" in event)) return {};
   const raw = asRecord(event.raw);
+  if (event.provider === "claude") {
+    return raw;
+  }
   const item = asRecord(asRecord(raw.params).item);
   return Object.keys(item).length ? item : raw;
 }

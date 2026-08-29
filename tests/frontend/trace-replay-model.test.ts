@@ -16,7 +16,7 @@ describe("trace replay model", () => {
       event(4, "commandExecution", { command: "rg Trace" }),
       event(5, "mcpToolCall", { server: "browser", tool: "screenshot" }),
       event(6, "agentMessage", { phase: "final_answer", text: "Done" }),
-    ], "key");
+    ]);
 
     expect(model.blocks.map((block) => block.type === "message"
       ? [block.type, block.node.kind, block.id]
@@ -39,7 +39,7 @@ describe("trace replay model", () => {
       event(2, "commandExecution", { command: "pwd" }),
       event(3, "mcpToolCall", { server: "fs", tool: "read" }),
       event(4, "agentMessage", { phase: "final_answer" }),
-    ], "key");
+    ]);
 
     expect(model.blocks.map((block) => block.type === "message"
       ? [block.type, block.node.kind]
@@ -50,7 +50,21 @@ describe("trace replay model", () => {
     ]);
   });
 
-  it("merges lifecycle events and only includes low-level noise in all-events mode", () => {
+  it("uses event time when synchronization sequence numbers restart out of order", () => {
+    const final = { ...event(1, "agentMessage", { phase: "final_answer" }), at: "2026-08-25T08:25:00.000Z" };
+    const request = { ...event(10, "userMessage"), at: "2026-08-25T08:03:00.000Z" };
+    const update = { ...event(11, "agentMessage", { phase: "commentary" }), at: "2026-08-25T08:04:00.000Z" };
+
+    const model = traceReplayModel([final, request, update]);
+
+    expect(model.blocks.map((block) => block.type === "message" ? block.node.title : block.type)).toEqual([
+      "Request",
+      "Update",
+      "Final response",
+    ]);
+  });
+
+  it("merges lifecycle events and includes low-level events", () => {
     const started = event(3, "commandExecution", { command: "npm test" });
     started.method = "item/started";
     started.status = "running";
@@ -67,34 +81,28 @@ describe("trace replay model", () => {
       completed,
     ];
 
-    const key = traceReplayModel(items, "key");
-    expect(key.total).toBe(5);
-    expect(key.visible).toBe(3);
-    const keyExecution = key.blocks.find((block) => block.type === "execution");
-    expect(keyExecution?.type === "execution" && keyExecution.actions).toHaveLength(1);
-    expect(keyExecution?.type === "execution" && keyExecution.actions[0]).toMatchObject({ status: "completed", durationMs: 120 });
-
-    const all = traceReplayModel(items, "all");
-    expect(all.visible).toBe(5);
-    const allExecution = all.blocks.find((block) => block.type === "execution");
-    expect(allExecution?.type === "execution" && allExecution.actions.map((item) => [item.kind, item.batch])).toEqual([
+    const model = traceReplayModel(items);
+    const execution = model.blocks.find((block) => block.type === "execution");
+    expect(execution?.type === "execution" && execution.actions.map((item) => [item.kind, item.batch])).toEqual([
       ["tool", 0],
       ["reasoning", 1],
       ["system", 2],
     ]);
+    expect(execution?.type === "execution" && execution.actions[0]).toMatchObject({ status: "completed", durationMs: 120 });
   });
 
-  it("uses hidden reasoning events as execution batch boundaries", () => {
+  it("uses reasoning events as execution batch boundaries", () => {
     const model = traceReplayModel([
       event(1, "agentMessage", { phase: "commentary" }),
       event(2, "commandExecution"),
       event(3, "reasoning", { summary: ["Check result"] }),
       event(4, "mcpToolCall"),
-    ], "key");
+    ]);
 
     const execution = model.blocks.find((block) => block.type === "execution");
     expect(execution?.type === "execution" && execution.actions.map((item) => [item.kind, item.batch])).toEqual([
       ["tool", 0],
+      ["reasoning", 1],
       ["mcp", 1],
     ]);
   });
@@ -116,7 +124,7 @@ describe("trace replay model", () => {
       secondStarted,
       secondCompleted,
       firstCompleted,
-    ], "key");
+    ]);
     const execution = model.blocks.find((block) => block.type === "execution");
     if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
 
@@ -131,7 +139,7 @@ describe("trace replay model", () => {
   it("marks completion-plus-duration overlap as inferred", () => {
     const first = { ...event(2, "commandExecution"), at: "2026-08-25T08:00:06.000Z", durationMs: 3_000 };
     const second = { ...event(3, "mcpToolCall"), at: "2026-08-25T08:00:06.000Z", durationMs: 1_000 };
-    const model = traceReplayModel([event(1, "agentMessage"), first, second], "key");
+    const model = traceReplayModel([event(1, "agentMessage"), first, second]);
     const execution = model.blocks.find((block) => block.type === "execution");
     if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
 
@@ -149,7 +157,7 @@ describe("trace replay model", () => {
       { ...event(2, "commandExecution"), at: "2026-08-25T08:00:06.000Z", durationMs: 3_000 },
       event(3, "reasoning", { summary: ["next phase"] }),
       { ...event(4, "mcpToolCall"), at: "2026-08-25T08:00:06.000Z", durationMs: 1_000 },
-    ], "key");
+    ]);
     const execution = model.blocks.find((block) => block.type === "execution");
     if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
 
@@ -167,7 +175,7 @@ describe("trace replay model", () => {
       event(2, "commandExecution"),
       { ...event(3, "commandExecution"), status: "running" },
       { ...event(4, "fileChange"), status: "failed" },
-    ], "key");
+    ]);
     const execution = model.blocks.find((block) => block.type === "execution");
     if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
 
@@ -179,7 +187,7 @@ describe("trace replay model", () => {
     const model = traceReplayModel([
       event(1, "agentMessage", { phase: "commentary" }),
       event(2, "commandExecution", { command: "false", exitCode: 1 }),
-    ], "key");
+    ]);
     const execution = model.blocks.find((block) => block.type === "execution");
     if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
 

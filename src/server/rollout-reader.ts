@@ -23,8 +23,15 @@ interface RolloutTurn {
   startedAt?: number;
   completedAt?: number;
   durationMs?: number;
+  model?: string;
   tokenUsage?: TokenUsageBreakdown;
   items: Map<string, Record<string, unknown>>;
+}
+
+interface RolloutToolCall {
+  arguments?: unknown;
+  item?: Record<string, unknown>;
+  result?: unknown;
 }
 
 export async function readRolloutThread(
@@ -43,8 +50,10 @@ export async function readRolloutThread(
   let preview: string | undefined;
   let activeTurnId: string | undefined;
   let mostRecentTurnId: string | undefined;
+  let currentModel: string | undefined;
   let latestTokenUsage: ThreadTokenUsage | undefined;
   let previousTotal: TokenUsageBreakdown | undefined;
+  const toolCalls = new Map<string, RolloutToolCall>();
 
   const lines = createInterface({ input: createReadStream(source, { encoding: 'utf8' }), crlfDelay: Infinity });
   for await (const line of lines) {
@@ -63,6 +72,21 @@ export async function readRolloutThread(
       lastTimestamp = lastTimestamp === undefined ? timestamp : Math.max(lastTimestamp, timestamp);
     }
     const payload = record(entry.payload);
+    if (entry.type === 'world_state') {
+      currentModel = stringField(record(payload.state).model) ?? currentModel;
+      continue;
+    }
+    if (entry.type === 'response_item') {
+      const responseType = stringField(payload.type);
+      const callId = stringField(payload.call_id);
+      if (!callId) continue;
+      const toolCall = toolCalls.get(callId) ?? {};
+      if (responseType === 'function_call') toolCall.arguments = parseJsonValue(payload.arguments);
+      if (responseType === 'function_call_output') toolCall.result = parseJsonValue(payload.output);
+      if (toolCall.item) attachToolCallMetadata(toolCall.item, toolCall);
+      toolCalls.set(callId, toolCall);
+      continue;
+    }
     if (entry.type === 'session_meta') {
       sessionMeta = payload;
       continue;
@@ -72,13 +96,22 @@ export async function readRolloutThread(
       if (turnId) {
         activeTurnId = turnId;
         mostRecentTurnId = turnId;
-        getOrCreateTurn(turns, turnId);
+        const turn = getOrCreateTurn(turns, turnId);
+        turn.model = stringField(payload.model)
+          ?? stringField(record(payload.thread_settings).model)
+          ?? turn.model
+          ?? currentModel;
+        currentModel = turn.model ?? currentModel;
       }
       continue;
     }
     if (entry.type !== 'event_msg') continue;
 
     const eventType = stringField(payload.type);
+    if (eventType === 'thread_settings_applied') {
+      currentModel = stringField(record(payload.thread_settings).model) ?? currentModel;
+      continue;
+    }
     if (eventType === 'token_count') {
       const tokenUsage = normalizeThreadTokenUsage(payload.info ?? payload.token_usage ?? payload.tokenUsage);
       if (!tokenUsage) continue;
@@ -99,6 +132,7 @@ export async function readRolloutThread(
     const turnId = stringField(payload.turn_id);
     if (!eventType || !turnId) continue;
     const turn = getOrCreateTurn(turns, turnId);
+    turn.model = stringField(payload.model) ?? turn.model ?? currentModel;
     if (eventType === 'task_started') {
       activeTurnId = turnId;
       mostRecentTurnId = turnId;
@@ -122,18 +156,24 @@ export async function readRolloutThread(
     const item = normalizeItem(payload.item, payload);
     const itemId = stringField(item.id);
     if (!itemId) continue;
+    const toolCall = toolCalls.get(itemId);
+    if (toolCall) {
+      toolCall.item = item;
+      attachToolCallMetadata(item, toolCall);
+    }
     turn.items.set(itemId, item);
     if (!preview && item.type === 'userMessage') preview = itemText(item);
   }
 
   const historicalTurns = [...turns.values()]
-    .filter((turn) => turn.items.size > 0 || turn.startedAt !== undefined || turn.completedAt !== undefined || turn.tokenUsage !== undefined)
+    .filter((turn) => turn.items.size > 0 || turn.startedAt !== undefined || turn.completedAt !== undefined || turn.model !== undefined || turn.tokenUsage !== undefined)
     .map((turn) => ({
       id: turn.id,
       status: turn.status,
       ...(turn.startedAt === undefined ? {} : { startedAt: turn.startedAt }),
       ...(turn.completedAt === undefined ? {} : { completedAt: turn.completedAt }),
       ...(turn.durationMs === undefined ? {} : { durationMs: turn.durationMs }),
+      ...(turn.model === undefined ? {} : { model: turn.model }),
       ...(turn.tokenUsage === undefined ? {} : { tokenUsage: turn.tokenUsage }),
       items: [...turn.items.values()],
     }));
@@ -162,6 +202,20 @@ export async function readRolloutThread(
       turns: historicalTurns,
     },
   };
+}
+
+function attachToolCallMetadata(item: Record<string, unknown>, toolCall: RolloutToolCall): void {
+  if (toolCall.arguments !== undefined) item.arguments = toolCall.arguments;
+  if (toolCall.result !== undefined) item.result = toolCall.result;
+}
+
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== 'string' || !value) return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
 }
 
 async function findRolloutFile(codexHome: string, threadId: string): Promise<string | undefined> {

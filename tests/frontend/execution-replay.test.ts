@@ -37,9 +37,8 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).not.toContain('vbg-custom-replay-action__bar');
     expect(markup).not.toContain('vbg-custom-replay-action__timeline');
     expect(markup).toContain('aria-label="Trace overview"');
-    expect(markup).toContain('aria-label="Show all replay events"');
-    expect(markup).toContain('role="switch"');
-    expect(markup).toContain('aria-checked="false"');
+    expect(markup).not.toContain("Show all");
+    expect(markup).not.toContain('role="switch"');
     expect(markup).not.toContain('class="vbg-custom-replay-overview__sequence"');
     expect(markup).toContain('title="Bar width represents duration"');
     expect(markup).not.toContain('aria-label="Overview scale"');
@@ -226,28 +225,61 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).not.toContain("Result · 1 block");
     expect(inspectorMarkup).toContain('id="execution-inspector"');
     expect(inspectorMarkup).toContain('role="tablist"');
-    expect(inspectorMarkup).toContain("Payload");
-    expect(inspectorMarkup).toContain("Result");
+    expect(inspectorMarkup).toContain("Overview");
+    expect(inspectorMarkup).toContain("Raw event");
     expect(inspectorMarkup).not.toContain("Collapse action details");
     expect(inspectorMarkup).not.toContain("Expand action details");
     expect(inspectorMarkup).toContain("Close execution details");
+    expect(inspectorMarkup).toContain('<details class="vbg-custom-event-disclosure" open="">');
     expect(inspectorMarkup).toContain("Result · 1 block");
     expect(inspectorMarkup).toContain("done");
   });
 
-  it("renders collaboration dispatch and wait as fork and join lanes", () => {
+  it("labels the recorded start timestamp with an unambiguous local date", () => {
+    const commandEvent = {
+      ...event(2, "commandExecution", { command: "npm test" }),
+      at: "2026-08-29T00:04:05.000",
+      startedAt: "2026-08-29T00:04:01.954",
+      completedAt: "2026-08-29T00:04:05.000",
+    };
+    const markup = renderToStaticMarkup(createElement(ExecutionInspector, {
+      item: {
+        seq: commandEvent.seq,
+        event: commandEvent,
+        kind: "tool",
+        title: "Shell · npm test",
+        detail: "npm test",
+        status: "completed",
+        at: commandEvent.at,
+        from: "agent",
+        to: "tool",
+        type: "call",
+      },
+      onClose: () => undefined,
+    }));
+
+    expect(markup).toContain('<time dateTime="2026-08-29T00:04:01.954">2026-08-29 00:04:01.954</time>');
+    expect(markup).not.toContain('<time dateTime="2026-08-29T00:04:05.000">');
+  });
+
+  it("renders collaboration dispatch and wait with explicit wait semantics", () => {
     const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
       items: [
         event(1, "agentMessage"),
         event(2, "collabAgentToolCall", { tool: "spawnAgent", receiverThreadIds: ["child-1"] }),
-        event(3, "collabAgentToolCall", { tool: "wait", receiverThreadIds: ["child-1"] }),
+        event(3, "collabAgentToolCall", {
+          tool: "wait",
+          receiverThreadIds: ["child-1"],
+          result: { message: "Wait timed out.", timed_out: true },
+        }),
       ],
     }));
 
     expect(markup).toContain("Subagents ×2");
     expect(markup).toContain('vbg-custom-replay-action--subagent');
     expect(markup).toContain('vbg-custom-replay-action__label">Fork</span>');
-    expect(markup).toContain('vbg-custom-replay-action__label">Join</span>');
+    expect(markup).toContain('vbg-custom-replay-action__label">Wait</span>');
+    expect(markup).toContain("Timed out");
   });
 
   it("labels multiple collaboration forks as a parallel dispatch", () => {

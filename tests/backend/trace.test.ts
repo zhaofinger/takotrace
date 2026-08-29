@@ -69,6 +69,7 @@ describe("trace lifecycle timing", () => {
       updatedAt: 1_767_225_603,
       turns: [{
         id: "turn-1",
+        model: "gpt-5.6-sol",
         status: "completed",
         startedAt: 1_767_225_600,
         completedAt: 1_767_225_603,
@@ -83,11 +84,33 @@ describe("trace lifecycle timing", () => {
       }],
     });
 
+    expect(thread?.turns[0]).toMatchObject({ model: "gpt-5.6-sol" });
     expect(thread?.turns[0].items[0]).toMatchObject({
       at: "2026-01-01T00:00:02.000Z",
       startedAt: "2026-01-01T00:00:01.000Z",
       completedAt: "2026-01-01T00:00:02.000Z",
     });
+  });
+
+  it("reads a run model from live turn notifications", () => {
+    const event = notificationToTrace({
+      method: "turn/started",
+      params: {
+        threadId: "thread-1",
+        turn: { id: "turn-1", model: "gpt-5.6-sol" },
+      },
+    });
+
+    expect(event.model).toBe("gpt-5.6-sol");
+
+    const settings = notificationToTrace({
+      method: "thread/settings/updated",
+      params: {
+        threadId: "thread-1",
+        threadSettings: { model: "gpt-5.6-terra" },
+      },
+    });
+    expect(settings.model).toBe("gpt-5.6-terra");
   });
 
   it("preserves and normalizes subagent thread metadata", () => {

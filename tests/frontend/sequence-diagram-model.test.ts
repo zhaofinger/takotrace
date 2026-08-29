@@ -59,12 +59,10 @@ describe("sequence-diagram-model", () => {
     ]);
   });
 
-  it("builds correct participants and steps for all density", () => {
-    const model = buildSequenceDiagramModel(sampleItems, "all");
+  it("builds participants and includes every step", () => {
+    const model = buildSequenceDiagramModel(sampleItems);
     expect(model.participants.map((p) => p.key)).toEqual(["user", "agent", "tool"]);
     expect(model.steps).toHaveLength(4);
-    expect(model.totalSteps).toBe(4);
-    expect(model.visibleSteps).toBe(4);
 
     // Step 1: User -> Agent
     expect(model.steps[0].from).toBe("user");
@@ -87,14 +85,65 @@ describe("sequence-diagram-model", () => {
     expect(model.steps[3].type).toBe("return");
   });
 
-  it("filters non-key steps (like reasoning) when density is key", () => {
-    const model = buildSequenceDiagramModel(sampleItems, "key");
-    expect(model.steps).toHaveLength(3);
-    expect(model.steps.some((s) => s.type === "self")).toBe(false);
+  it("uses parent and worker semantics inside a subagent run", () => {
+    const model = buildSequenceDiagramModel(sampleItems, "subagent");
+
+    expect(model.participants.map(({ key, label, subtext }) => ({ key, label, subtext }))).toEqual([
+      { key: "user", label: "Parent Agent", subtext: "Orchestrator" },
+      { key: "agent", label: "Subagent", subtext: "Current worker" },
+      { key: "tool", label: "Tools", subtext: "Shell / Files" },
+    ]);
+    expect(model.steps[0]).toMatchObject({ from: "user", to: "agent", label: "Task input" });
+    expect(model.steps[3]).toMatchObject({ from: "agent", to: "user", label: "Result" });
+    expect(exportMermaidSequence(model)).toContain("participant user as Parent Agent");
+    expect(exportMermaidSequence(model)).toContain("participant agent as Subagent");
+  });
+
+  it("routes parent activity back to Parent Agent instead of inventing a Child Subagent", () => {
+    const model = buildSequenceDiagramModel([
+      createEvent("subAgentActivity", {
+        kind: "interacted",
+        agent_path: "/root",
+        agent_thread_id: "parent-1",
+      }),
+    ], "subagent", {
+      id: "worker-1",
+      parentThreadId: "parent-1",
+      agentPath: "/root/model_ui_audit",
+    });
+
+    expect(model.participants.map((participant) => participant.key)).toEqual(["user", "agent"]);
+    expect(model.steps[0]).toMatchObject({
+      from: "agent",
+      to: "user",
+      type: "return",
+      displayTitle: "Update · root",
+    });
+  });
+
+  it("keeps a real descendant on the Child Subagent lane", () => {
+    const model = buildSequenceDiagramModel([
+      createEvent("subAgentActivity", {
+        kind: "interacted",
+        agent_path: "/root/model_ui_audit/browser_qa",
+        agent_thread_id: "child-1",
+      }),
+    ], "subagent", {
+      id: "worker-1",
+      parentThreadId: "parent-1",
+      agentPath: "/root/model_ui_audit",
+    });
+
+    expect(model.participants.map((participant) => participant.label)).toEqual([
+      "Parent Agent",
+      "Subagent",
+      "Child Subagent",
+    ]);
+    expect(model.steps[0]).toMatchObject({ from: "subagent", to: "agent", type: "return" });
   });
 
   it("exports valid Mermaid.js sequence syntax", () => {
-    const model = buildSequenceDiagramModel(sampleItems, "all");
+    const model = buildSequenceDiagramModel(sampleItems);
     const mermaid = exportMermaidSequence(model);
 
     expect(mermaid).toContain("sequenceDiagram");
@@ -240,7 +289,7 @@ describe("sequence-diagram-model", () => {
       { from: "agent", to: "subagent", type: "call", displayTitle: "Started · frontend_impl" },
       { from: "agent", to: "subagent", type: "call", displayTitle: "Message · frontend_impl" },
       { from: "subagent", to: "agent", type: "return", displayTitle: "Update · frontend_impl" },
-      { from: "agent", to: "subagent", type: "call", displayTitle: "Join subagents" },
+      { from: "agent", to: "subagent", type: "call", displayTitle: "Wait for subagents" },
       { from: "subagent", to: "agent", type: "return", displayTitle: "Result · frontend_impl" },
     ]);
     expect(exportMermaidSequence(model)).toContain("agent->>+subagent: Started · frontend_impl");

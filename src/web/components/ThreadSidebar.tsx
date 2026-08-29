@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { projectName } from "../formatters";
-import type { Thread } from "../types";
+import { handleRovingTabKey } from "../roving-tabs";
+import type { SessionProvider, Thread } from "../types";
 import { Icon } from "./Icon";
 
 const COLLAPSED_THREAD_COUNT = 5;
@@ -53,12 +54,18 @@ export function buildTimeGroups(threads: Thread[], now = new Date()): TimeThread
 }
 
 export function ThreadSidebar({
+  activeProvider = "codex",
+  counts,
   isLoading = false,
+  onProviderChange,
   threads,
   selectedId,
   onSelect,
 }: {
+  activeProvider?: SessionProvider;
+  counts?: Record<SessionProvider, number>;
   isLoading?: boolean;
+  onProviderChange?: (provider: SessionProvider) => void;
   threads: Thread[];
   selectedId?: string;
   onSelect: (id: string) => void;
@@ -93,6 +100,23 @@ export function ThreadSidebar({
 
   return (
     <aside aria-busy={isLoading} className="vbg-custom-threads" aria-label="Sessions">
+      <div aria-label="Session provider" className="vbg-custom-provider-tabs" role="tablist">
+        {(["codex", "claude"] as const).map((provider) => (
+          <button
+            aria-selected={activeProvider === provider}
+            className={activeProvider === provider ? "vbg-custom-is-selected" : undefined}
+            key={provider}
+            onClick={() => onProviderChange?.(provider)}
+            onKeyDown={handleRovingTabKey}
+            role="tab"
+            tabIndex={activeProvider === provider ? 0 : -1}
+            type="button"
+          >
+            <span>{provider === "codex" ? "Codex" : "Claude"}</span>
+            <span className="vbg-custom-provider-tabs__count">{counts?.[provider] ?? 0}</span>
+          </button>
+        ))}
+      </div>
       {threads.length > 0 && (
         <label className="vbg-custom-thread-select-wrap">
           <span className="vbg-custom-sr-only">Select session</span>

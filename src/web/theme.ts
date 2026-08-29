@@ -1,4 +1,4 @@
-export const THEME_STORAGE_KEY = "thread-scope-theme";
+export const THEME_STORAGE_KEY = "takotrace-theme";
 
 export const THEME_PREFERENCES = ["auto", "light", "dark"] as const;
 

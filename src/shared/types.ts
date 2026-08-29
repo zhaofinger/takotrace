@@ -1,6 +1,8 @@
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
-export type EntityStatus = 'pending' | 'running' | 'completed' | 'failed';
-export type HistorySource = 'app-server' | 'rollout-file';
+export type EntityStatus = 'pending' | 'running' | 'completed' | 'interrupted' | 'failed';
+export type ProviderId = 'codex' | 'claude';
+export type ProviderSelection = ProviderId | 'all';
+export type HistorySource = 'app-server' | 'rollout-file' | 'claude';
 
 export interface TokenUsageBreakdown {
   totalTokens: number;
@@ -33,7 +35,9 @@ export interface TraceEvent {
   parentItemId?: string;
   summary: string;
   durationMs?: number;
+  model?: string;
   tokenUsage?: ThreadTokenUsage;
+  provider?: ProviderId;
   raw: unknown;
 }
 
@@ -43,6 +47,7 @@ export interface TurnState {
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;
+  model?: string;
   tokenUsage?: TokenUsageBreakdown;
   items: TraceEvent[];
 }
@@ -53,6 +58,7 @@ export interface ThreadState {
   status: EntityStatus;
   turnsLoaded: boolean;
   historySource?: HistorySource;
+  provider?: ProviderId;
   createdAt: string;
   updatedAt: string;
   cwd?: string;
@@ -64,6 +70,7 @@ export interface ThreadState {
 export interface AppState {
   connection: {
     status: ConnectionStatus;
+    provider?: ProviderSelection;
     userAgent?: string;
     error?: string;
   };
@@ -91,6 +98,7 @@ export interface HistoricalTurn {
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;
+  model?: string;
   tokenUsage?: TokenUsageBreakdown;
   items: Array<Omit<TraceEvent, 'seq'>>;
 }
@@ -104,6 +112,7 @@ export interface HistoricalThread {
   status: EntityStatus;
   turnsLoaded: boolean;
   historySource?: HistorySource;
+  provider?: ProviderId;
   createdAt: string;
   updatedAt: string;
   cwd?: string;

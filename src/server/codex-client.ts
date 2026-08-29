@@ -2,6 +2,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { JsonlParser } from '../shared/jsonl.js';
 import type { RpcMessage, RpcNotification, RpcResponse } from '../shared/types.js';
+import { notificationToTrace } from '../shared/trace.js';
+import type { TraceInput, TraceProvider } from './provider.js';
 import { readRolloutThread, rolloutSourceName } from './rollout-reader.js';
 
 export interface CodexClientOptions {
@@ -22,7 +24,8 @@ export interface ThreadStartInput {
   [key: string]: unknown;
 }
 
-export class CodexClient {
+export class CodexClient implements TraceProvider {
+  readonly providerId = 'codex' as const;
   private readonly emitter = new EventEmitter();
   private readonly options: CodexClientOptions;
   private readonly parser = new JsonlParser<RpcMessage>();
@@ -42,8 +45,8 @@ export class CodexClient {
     this.options = options;
   }
 
-  async start(): Promise<{ userAgent?: string }> {
-    if (this.child) return {};
+  async start(): Promise<{ provider: 'codex'; userAgent?: string }> {
+    if (this.child) return { provider: 'codex' };
     const command = this.options.command ?? 'codex';
     const args = this.options.args ?? ['app-server', '--stdio'];
     const child = spawn(command, args, {
@@ -61,7 +64,7 @@ export class CodexClient {
     });
 
     const initialized = await this.request('initialize', {
-      clientInfo: { name: 'thread-scope', title: 'ThreadScope', version: '0.1.0' },
+      clientInfo: { name: 'takotrace', title: 'TakoTrace', version: '0.1.0' },
       capabilities: { experimentalApi: true, requestAttestation: false },
     });
     this.notify('initialized');
@@ -73,7 +76,7 @@ export class CodexClient {
     const result = initialized && typeof initialized === 'object'
       ? initialized as Record<string, unknown>
       : {};
-    return { userAgent: typeof result.userAgent === 'string' ? result.userAgent : undefined };
+    return { provider: 'codex', userAgent: typeof result.userAgent === 'string' ? result.userAgent : undefined };
   }
 
   async stop(): Promise<void> {
@@ -101,12 +104,16 @@ export class CodexClient {
     return () => this.emitter.off('notification', listener);
   }
 
+  onTrace(listener: (event: TraceInput) => void): () => void {
+    return this.onNotification((notification) => listener(notificationToTrace(notification)));
+  }
+
   onError(listener: (error: Error) => void): () => void {
     this.emitter.on('clientError', listener);
     return () => this.emitter.off('clientError', listener);
   }
 
-  onHistory(listener: (threads: unknown[], replace: boolean) => void): () => void {
+  onHistory(listener: (threads: unknown[], replace: boolean, provider?: 'codex') => void): () => void {
     this.emitter.on('history', listener);
     return () => this.emitter.off('history', listener);
   }
@@ -130,7 +137,7 @@ export class CodexClient {
     }
     try {
       const response = await this.request('thread/read', { threadId, includeTurns: true }, timeoutMs);
-      return await this.mergeRolloutUsage(threadId, response);
+      return await this.mergeRolloutMetadata(threadId, response);
     } catch (error) {
       if (this.isDeserializationOrCorruptError(error)) {
         try {
@@ -156,7 +163,7 @@ export class CodexClient {
     }
   }
 
-  private async mergeRolloutUsage(threadId: string, response: unknown): Promise<unknown> {
+  private async mergeRolloutMetadata(threadId: string, response: unknown): Promise<unknown> {
     try {
       const rollout = await readRolloutThread(threadId, { codexHome: this.options.codexHome });
       if (!rollout) return response;
@@ -164,17 +171,22 @@ export class CodexClient {
       const thread = record(result.thread);
       if (!Object.keys(thread).length) return response;
       const rolloutThread = rollout.thread;
-      const usageByTurn = new Map((Array.isArray(rolloutThread.turns) ? rolloutThread.turns : []).flatMap((value) => {
+      const rolloutByTurn = new Map((Array.isArray(rolloutThread.turns) ? rolloutThread.turns : []).flatMap((value) => {
         const turn = record(value);
-        return typeof turn.id === 'string' && turn.tokenUsage !== undefined
-          ? [[turn.id, turn.tokenUsage] as const]
+        return typeof turn.id === 'string'
+          ? [[turn.id, { model: turn.model, tokenUsage: turn.tokenUsage }] as const]
           : [];
       }));
       const turns = Array.isArray(thread.turns)
         ? thread.turns.map((value) => {
           const turn = record(value);
-          const tokenUsage = typeof turn.id === 'string' ? usageByTurn.get(turn.id) : undefined;
-          return tokenUsage === undefined ? value : { ...turn, tokenUsage };
+          const rolloutTurn = typeof turn.id === 'string' ? rolloutByTurn.get(turn.id) : undefined;
+          if (!rolloutTurn) return value;
+          return {
+            ...turn,
+            ...(turn.model === undefined && rolloutTurn.model !== undefined ? { model: rolloutTurn.model } : {}),
+            ...(rolloutTurn.tokenUsage === undefined ? {} : { tokenUsage: rolloutTurn.tokenUsage }),
+          };
         })
         : thread.turns;
       return {
@@ -186,7 +198,7 @@ export class CodexClient {
         },
       };
     } catch (error) {
-      this.emitter.emit('stderr', `Warning: rollout usage merge failed for thread ${threadId}: ${error instanceof Error ? error.message : error}.\n`);
+      this.emitter.emit('stderr', `Warning: rollout metadata merge failed for thread ${threadId}: ${error instanceof Error ? error.message : error}.\n`);
       return response;
     }
   }
@@ -198,12 +210,12 @@ export class CodexClient {
       const thread = response.thread;
       if (thread) {
         this.threadVersions.set(threadId, numberField(thread, 'updatedAt'));
-        this.emitter.emit('history', [withTurnsLoaded(thread, true)], false);
+        this.emitter.emit('history', [withTurnsLoaded(thread, true)], false, 'codex');
       }
       return response;
     } catch (error) {
       this.emitter.emit('stderr', `Warning: syncThread failed for ${threadId}: ${error instanceof Error ? error.message : error}\n`);
-      this.emitter.emit('history', [{ id: threadId, turnsLoaded: true }], false);
+      this.emitter.emit('history', [{ id: threadId, turnsLoaded: true }], false, 'codex');
       return { thread: null };
     }
   }
@@ -280,7 +292,7 @@ export class CodexClient {
         selectedIds.add(id);
       }
     }
-    this.emitter.emit('history', selected.map((value) => withTurnsLoaded(value, false)), true);
+    this.emitter.emit('history', selected.map((value) => withTurnsLoaded(value, false)), true, 'codex');
 
     const listedById = new Map(selected.flatMap((value) => {
       const id = record(value).id;
@@ -304,7 +316,7 @@ export class CodexClient {
       if (!selectedIds.has(id) && !this.loadedThreadIds.has(id)) this.threadVersions.delete(id);
     }
     const updates = hydrated.filter((value): value is NonNullable<typeof value> => value !== undefined);
-    if (updates.length) this.emitter.emit('history', updates, false);
+    if (updates.length) this.emitter.emit('history', updates, false, 'codex');
   }
 
   private consume(chunk: Buffer): void {

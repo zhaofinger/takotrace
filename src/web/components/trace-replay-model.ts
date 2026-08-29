@@ -5,7 +5,6 @@ import type { FlowEvent, FlowKind, FlowNode } from "./InteractionFlow";
 import { parallelExecutionGroups, parallelEventId } from "./parallel-execution-model";
 import type { ParallelGroup } from "./parallel-execution-model";
 
-export type ReplayDensity = "key" | "all";
 export type ReplayTimingMode = "observed" | "inferred" | "order";
 
 export interface ReplayAction {
@@ -18,6 +17,7 @@ export interface ReplayAction {
   detail: string;
   meta?: string;
   status: TraceStatus;
+  statusLabel?: string;
   durationMs?: number;
   startedAtMs?: number;
   completedAtMs?: number;
@@ -43,8 +43,6 @@ export type ReplayBlock = ReplayMessage | ReplayExecution;
 
 export interface TraceReplayModel {
   blocks: ReplayBlock[];
-  total: number;
-  visible: number;
 }
 
 export interface ReplayExecutionTiming {
@@ -91,21 +89,19 @@ function action(event: FlowEvent, node: FlowNode, batch: number, parallel?: Para
     detail: node.detail,
     meta: node.meta,
     status: commandFailed ? "failed" : event.status,
+    statusLabel: commandFailed ? undefined : node.statusLabel,
     durationMs: event.durationMs,
     parallel,
     ...timing,
   };
 }
 
-export function traceReplayModel(items: FlowEvent[], density: ReplayDensity): TraceReplayModel {
+export function traceReplayModel(items: FlowEvent[]): TraceReplayModel {
   const merged = mergeFlowEvents(items).map((event) => ({ event, node: flowNode(event) }));
   const parallelByEventId = new Map<string, ParallelGroup>();
   for (const group of parallelExecutionGroups(merged.map(({ event }) => event))) {
     for (const id of group.eventIds) if (!parallelByEventId.has(id)) parallelByEventId.set(id, group);
   }
-  const isVisible = ({ node }: typeof merged[number]) => density === "all"
-    || (node.kind !== "reasoning" && node.kind !== "system");
-  const visible = merged.filter(isVisible);
   const blocks: ReplayBlock[] = [];
   let currentAgentId: string | undefined;
   let forceExecutionBlock = true;
@@ -120,7 +116,6 @@ export function traceReplayModel(items: FlowEvent[], density: ReplayDensity): Tr
       continue;
     }
     if (item.node.kind === "reasoning" || item.node.kind === "system") currentBatch += 1;
-    if (!isVisible(item)) continue;
     const previous = blocks[blocks.length - 1];
     const parallel = parallelByEventId.get(parallelEventId(item.event));
     if (!forceExecutionBlock && previous?.type === "execution") previous.actions.push(action(item.event, item.node, currentBatch, parallel));
@@ -133,7 +128,7 @@ export function traceReplayModel(items: FlowEvent[], density: ReplayDensity): Tr
     forceExecutionBlock = false;
   }
 
-  return { blocks, total: merged.length, visible: visible.length };
+  return { blocks };
 }
 
 function timingForActions(actions: ReplayAction[]): ReplayExecutionTiming {

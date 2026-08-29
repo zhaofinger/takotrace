@@ -1,15 +1,15 @@
 import { fetchSubagentThread } from "./client";
-import type { ThreadDetail } from "./types";
+import type { SubagentDetail } from "./types";
 
 export type SubagentDetailSnapshot =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "success"; thread: ThreadDetail }
+  | ({ status: "success" } & SubagentDetail)
   | { status: "error"; error: string };
 
 const idleSnapshot: SubagentDetailSnapshot = { status: "idle" };
 const entries = new Map<string, SubagentDetailSnapshot>();
-const inFlight = new Map<string, Promise<ThreadDetail>>();
+const inFlight = new Map<string, Promise<SubagentDetail>>();
 const listeners = new Map<string, Set<() => void>>();
 
 export function getSubagentDetailSnapshot(threadId: string): SubagentDetailSnapshot {
@@ -26,18 +26,20 @@ export function subscribeToSubagentDetail(threadId: string, listener: () => void
   };
 }
 
-export function loadSubagentDetail(threadId: string, retry = false): Promise<ThreadDetail> {
+export function loadSubagentDetail(threadId: string, retry = false): Promise<SubagentDetail> {
   const pending = inFlight.get(threadId);
   if (pending) return pending;
 
   const cached = entries.get(threadId);
-  if (!retry && cached?.status === "success") return Promise.resolve(cached.thread);
+  if (!retry && cached?.status === "success") {
+    return Promise.resolve({ thread: cached.thread, assignment: cached.assignment });
+  }
 
   setEntry(threadId, { status: "loading" });
   const request = fetchSubagentThread(threadId)
-    .then((thread) => {
-      setEntry(threadId, { status: "success", thread });
-      return thread;
+    .then((detail) => {
+      setEntry(threadId, { status: "success", ...detail });
+      return detail;
     })
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);

@@ -2,7 +2,6 @@ import type { TraceStatus } from "../types";
 import { flowNode, mergeFlowEvents } from "./InteractionFlow";
 import type { FlowEvent, FlowKind } from "./InteractionFlow";
 
-export type GraphDensity = "key" | "all";
 export type TraceGraphTier = "main" | "execution" | "nested";
 
 export interface TraceGraphNode {
@@ -30,21 +29,16 @@ export interface TraceGraphEdge {
 export interface TraceGraphModel {
   nodes: TraceGraphNode[];
   edges: TraceGraphEdge[];
-  total: number;
 }
 
 function nodeId(event: FlowEvent): string {
   return event.itemId ? `item-${event.itemId}` : `event-${event.seq}`;
 }
 
-export function traceGraphModel(items: FlowEvent[], density: GraphDensity): TraceGraphModel {
+export function traceGraphModel(items: FlowEvent[]): TraceGraphModel {
   const merged = mergeFlowEvents(items).map((event) => ({ event, descriptor: flowNode(event) }));
-  const visible = density === "all"
-    ? merged
-    : merged.filter(({ descriptor }) => descriptor.kind !== "reasoning" && descriptor.kind !== "system");
-  const source = visible.length ? visible : merged;
   let currentAgentId: string | undefined;
-  const nodes = source.map(({ event, descriptor }, index) => {
+  const nodes = merged.map(({ event, descriptor }, index) => {
     const id = nodeId(event);
     const isMain = descriptor.kind === "user" || descriptor.kind === "agent";
     const tier: TraceGraphTier = isMain
@@ -93,5 +87,5 @@ export function traceGraphModel(items: FlowEvent[], density: GraphDensity): Trac
     lastChildByOwner.set(node.ownerId, node.id);
   }
   const edges = [...mainEdges, ...childEdges];
-  return { nodes, edges, total: merged.length };
+  return { nodes, edges };
 }

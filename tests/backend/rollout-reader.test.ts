@@ -20,7 +20,7 @@ describe('rollout reader', () => {
     await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${THREAD_ID}.jsonl`), [
       entry('session_meta', { id: THREAD_ID, timestamp: '2026-08-25T12:58:38.000Z', cwd: '/tmp/project', cli_version: '0.150.0' }),
       entry('event_msg', { type: 'task_started', turn_id: TURN_ID, started_at: 1_767_000_000 }),
-      entry('turn_context', { turn_id: TURN_ID }),
+      entry('turn_context', { turn_id: TURN_ID, model: 'gpt-5.6-sol' }),
       entry('turn_context', { turn_id: TURN_ID }),
       entry('event_msg', {
         type: 'token_count',
@@ -52,6 +52,16 @@ describe('rollout reader', () => {
         turn_id: TURN_ID,
         item: { id: 'subagent-1', type: 'SubAgentActivity', kind: 'completed', agent_thread_id: 'child-1' },
       }),
+      entry('response_item', {
+        type: 'function_call', name: 'wait_agent', call_id: 'wait-1', arguments: '{"timeout_ms":60000}',
+      }),
+      entry('event_msg', {
+        type: 'item_completed', turn_id: TURN_ID,
+        item: { id: 'wait-1', type: 'CollabAgentToolCall', tool: 'wait', status: 'completed' },
+      }),
+      entry('response_item', {
+        type: 'function_call_output', call_id: 'wait-1', output: '{"message":"Wait timed out.","timed_out":true}',
+      }),
       entry('event_msg', { type: 'task_complete', turn_id: TURN_ID, started_at: 1_767_000_000, completed_at: 1_767_000_003, duration_ms: 3_000 }),
       '{"type":"event_msg"',
     ].join('\n'));
@@ -63,7 +73,7 @@ describe('rollout reader', () => {
     expect(result?.thread.cwd).toBe('/tmp/project');
     expect(result?.thread.historySource).toBe('rollout-file');
     const turn = (result?.thread.turns as Array<Record<string, unknown>>)[0];
-    expect(turn).toMatchObject({ id: TURN_ID, status: 'completed', durationMs: 3_000 });
+    expect(turn).toMatchObject({ id: TURN_ID, status: 'completed', durationMs: 3_000, model: 'gpt-5.6-sol' });
     expect(turn.tokenUsage).toMatchObject({ totalTokens: 160, inputTokens: 125, outputTokens: 35 });
     expect(result?.thread.tokenUsage).toMatchObject({
       total: { totalTokens: 160, inputTokens: 125, outputTokens: 35 },
@@ -73,6 +83,11 @@ describe('rollout reader', () => {
     expect(turn.items).toEqual([
       expect.objectContaining({ id: 'user-1', type: 'userMessage', durationMs: 10 }),
       expect.objectContaining({ id: 'subagent-1', type: 'subAgentActivity', kind: 'completed', agentThreadId: 'child-1' }),
+      expect.objectContaining({
+        id: 'wait-1', type: 'collabAgentToolCall',
+        arguments: { timeout_ms: 60_000 },
+        result: { message: 'Wait timed out.', timed_out: true },
+      }),
     ]);
   });
 
@@ -97,6 +112,35 @@ describe('rollout reader', () => {
     expect((result?.thread.turns as Array<Record<string, unknown>>)[0].tokenUsage).toMatchObject({ totalTokens: 40 });
   });
 
+  it('keeps models per run and uses recorded settings only as a fallback', async () => {
+    const codexHome = await temporaryCodexHome();
+    const directory = join(codexHome, 'sessions', '2026', '08', '25');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${THREAD_ID}.jsonl`), [
+      entry('session_meta', { id: THREAD_ID }),
+      entry('world_state', { state: { model: 'gpt-default' } }),
+      entry('turn_context', { turn_id: 'turn-1' }),
+      entry('event_msg', { type: 'task_started', turn_id: 'turn-1' }),
+      entry('event_msg', { type: 'task_complete', turn_id: 'turn-1' }),
+      entry('event_msg', { type: 'thread_settings_applied', thread_settings: { model: 'gpt-setting' } }),
+      entry('turn_context', { turn_id: 'turn-2' }),
+      entry('event_msg', { type: 'task_started', turn_id: 'turn-2' }),
+      entry('event_msg', { type: 'task_complete', turn_id: 'turn-2' }),
+      entry('turn_context', { turn_id: 'turn-3', model: 'gpt-explicit' }),
+      entry('event_msg', { type: 'task_started', turn_id: 'turn-3' }),
+      entry('event_msg', { type: 'task_complete', turn_id: 'turn-3' }),
+    ].join('\n'));
+
+    const result = await readRolloutThread(THREAD_ID, { codexHome });
+    const turns = result?.thread.turns as Array<Record<string, unknown>>;
+
+    expect(turns.map(({ id, model }) => ({ id, model }))).toEqual([
+      { id: 'turn-1', model: 'gpt-default' },
+      { id: 'turn-2', model: 'gpt-setting' },
+      { id: 'turn-3', model: 'gpt-explicit' },
+    ]);
+  });
+
   it('rejects non-Codex ids without touching arbitrary paths', async () => {
     const codexHome = await temporaryCodexHome();
     await expect(readRolloutThread('../sessions/secret', { codexHome })).resolves.toBeUndefined();
@@ -104,7 +148,7 @@ describe('rollout reader', () => {
 });
 
 async function temporaryCodexHome(): Promise<string> {
-  const path = await mkdtemp(join(tmpdir(), 'thread-scope-rollout-'));
+  const path = await mkdtemp(join(tmpdir(), 'takotrace-rollout-'));
   temporaryDirectories.push(path);
   return path;
 }

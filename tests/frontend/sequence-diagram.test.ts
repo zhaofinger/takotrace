@@ -52,10 +52,9 @@ describe("SequenceDiagram Component", () => {
 
   it("renders participants and sequence steps", () => {
     const markup = renderToStaticMarkup(createElement(SequenceDiagram, { items: sampleItems }));
-    expect(markup).toContain('role="switch"');
-    expect(markup).toContain('aria-checked="false"');
-    expect(markup).toContain('aria-label="Show all sequence steps"');
-    expect(markup).toContain("3 / 3");
+    expect(markup).not.toContain("Show all");
+    expect(markup).not.toContain('role="switch"');
+    expect(markup).not.toContain("vbg-custom-sequence__toolbar");
     expect(markup).toContain("Copy Mermaid");
     expect(markup).toContain("User");
     expect(markup).toContain("Agent");
@@ -70,6 +69,20 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain('data-tooltip="Shell · git status"');
     expect(markup.match(/tabindex="0"/g)).toHaveLength(1);
     expect(markup.match(/tabindex="-1"/g)).toHaveLength(2);
+  });
+
+  it("labels child-run messages as communication with the parent agent", () => {
+    const markup = renderToStaticMarkup(createElement(SequenceDiagram, {
+      items: sampleItems,
+      scope: "subagent",
+    }));
+
+    expect(markup).toContain("Parent Agent");
+    expect(markup).toContain("Current worker");
+    expect(markup).toContain("Subagent");
+    expect(markup).toContain("Parent Agent to Subagent");
+    expect(markup).toContain("Subagent to Parent Agent");
+    expect(markup).not.toContain(">User</strong>");
   });
 
   it("moves step selection with vertical navigation keys without wrapping", () => {
@@ -94,7 +107,7 @@ describe("SequenceDiagram Component", () => {
     expect(markup.match(/vbg-custom-sequence__step-row--parallel(?:\s|")/g)).toHaveLength(2);
   });
 
-  it("hides reasoning by default and exposes the full-step count", () => {
+  it("always renders reasoning without a density control", () => {
     const items = [
       sampleItems[0],
       createEvent("reasoning", { summary: ["Thinking through the request"] }, {
@@ -104,8 +117,9 @@ describe("SequenceDiagram Component", () => {
     ];
     const markup = renderToStaticMarkup(createElement(SequenceDiagram, { items }));
 
-    expect(markup).toContain("1 / 2");
-    expect(markup).not.toContain("Thinking through the request");
+    expect(markup).not.toContain("Show all");
+    expect(markup).toContain("Step 2: Think &amp; Plan - Reasoning");
+    expect(markup.match(/vbg-custom-sequence__step-row--role-/g)).toHaveLength(2);
   });
 
   it("renders compact shell command titles without hiding failure state", () => {
@@ -162,7 +176,8 @@ describe("SequenceDiagram Component", () => {
       item: {
         seq: step.seq,
         kind: step.node.kind,
-        title: step.detailTitle,
+        title: step.displayTitle,
+        fullTitle: step.detailTitle,
         detail: step.detail,
         status: step.status,
         durationMs: step.durationMs,
@@ -178,13 +193,47 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('role="tab"');
     expect(markup).toContain('aria-selected="true"');
-    expect(markup).toContain("Summary");
-    expect(markup).toContain("Payload");
-    expect(markup).toContain("Result");
-    expect(markup).toContain("Timing");
+    expect(markup).toContain("Overview");
+    expect(markup).toContain("Raw event");
     expect(markup).toContain("TOOL");
+    expect(markup).toContain(`<strong title="${step.detailTitle}">${step.displayTitle}</strong>`);
     expect(markup).toContain('role="tabpanel"');
-    expect(markup).toContain("Details");
+    expect(markup).toContain("Content");
     expect(markup).toContain("working tree clean");
+  });
+
+  it("keeps a subagent drawer to basic timing, input, and result information", () => {
+    const subagentEvent = createEvent("collabAgentToolCall", {
+      tool: "spawnAgent",
+      prompt: "Inspect the layout",
+      receiverThreadIds: ["child-1"],
+    });
+    const markup = renderToStaticMarkup(createElement(ExecutionInspector, {
+      item: {
+        seq: 4,
+        kind: "subagent",
+        title: "Started · layout_review",
+        detail: "Started · layout_review",
+        status: "completed",
+        durationMs: 25,
+        at: subagentEvent.at,
+        from: "agent",
+        to: "subagent",
+        type: "call",
+        event: subagentEvent,
+      },
+      onClose: () => undefined,
+      subagentView: "sequence",
+    }));
+
+    expect(markup).toContain('aria-label="Execution timing"');
+    expect(markup).toContain("<dt>Started</dt>");
+    expect(markup).toContain("<dt>Event latency</dt><dd>25ms</dd>");
+    expect(markup).toContain("Loading assigned task and result…");
+    expect(markup).not.toContain('role="tablist"');
+    expect(markup).not.toContain("Raw event");
+    expect(markup).not.toContain("Direction");
+    expect(markup).not.toContain("Type");
+    expect(markup).not.toContain("Content");
   });
 });

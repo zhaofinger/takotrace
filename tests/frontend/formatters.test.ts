@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatCompactDuration,
   formatDateTime,
+  formatDateTimeWithMilliseconds,
   formatDuration,
   formatExactNumber,
   formatPercentage,
@@ -30,5 +31,10 @@ describe("shared display formatters", () => {
     expect(projectName("/Users/example/thread-scope/")).toBe("thread-scope");
     expect(projectName()).toBe("Unknown project");
     expect(formatDateTime("not-a-date")).toBe("not-a-date");
+    expect(formatDateTimeWithMilliseconds("not-a-date")).toBe("not-a-date");
+  });
+
+  it("keeps the local date visible for precise execution timestamps", () => {
+    expect(formatDateTimeWithMilliseconds("2026-08-29T00:04:01.954")).toBe("2026-08-29 00:04:01.954");
   });
 });

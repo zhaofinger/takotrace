@@ -5,7 +5,7 @@ import { Header } from "./components/Header";
 import { ThreadSidebar } from "./components/ThreadSidebar";
 import { Timeline } from "./components/Timeline";
 import { nextThemePreference, readThemePreference, THEME_STORAGE_KEY } from "./theme";
-import type { AppState, SnapshotEvent, TraceEvent, Turn } from "./types";
+import type { AppState, SessionProvider, SnapshotEvent, Thread, TraceEvent, Turn } from "./types";
 
 const initialState: AppState = {
   connection: { status: "connecting" },
@@ -17,9 +17,14 @@ function isSnapshot(value: TraceEvent | SnapshotEvent): value is SnapshotEvent {
   return "kind" in value && value.kind === "snapshot";
 }
 
+export function filterThreadsByProvider(threads: Thread[], provider: SessionProvider): Thread[] {
+  return threads.filter((thread) => (thread.provider ?? "codex") === provider);
+}
+
 export default function App() {
   const [theme, setTheme] = useState(readThemePreference);
   const [state, setState] = useState<AppState>(initialState);
+  const [activeProvider, setActiveProvider] = useState<SessionProvider>("codex");
   const [selectedThreadId, setSelectedThreadId] = useState<string>();
   const [selectedTurnId, setSelectedTurnId] = useState<string>();
   const [turnDetail, setTurnDetail] = useState<Turn>();
@@ -42,11 +47,11 @@ export default function App() {
     } catch {
       // Theme switching still works for this session when storage is unavailable.
     }
-    window.dispatchEvent(new Event("threadscope:themechange"));
+    window.dispatchEvent(new Event("takotrace:themechange"));
 
     if (theme !== "auto") return;
     const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => window.dispatchEvent(new Event("threadscope:themechange"));
+    const handleChange = () => window.dispatchEvent(new Event("takotrace:themechange"));
     colorScheme.addEventListener("change", handleChange);
     return () => colorScheme.removeEventListener("change", handleChange);
   }, [theme]);
@@ -86,15 +91,20 @@ export default function App() {
     };
   }, [loadState]);
 
+  const visibleThreads = useMemo(
+    () => filterThreadsByProvider(state.threads, activeProvider),
+    [activeProvider, state.threads],
+  );
+
   useEffect(() => {
-    if (!state.threads.length) {
+    if (!visibleThreads.length) {
       setSelectedThreadId(undefined);
       return;
     }
-    if (!selectedThreadId || !state.threads.some((thread) => thread.id === selectedThreadId)) {
-      setSelectedThreadId(state.threads[0].id);
+    if (!selectedThreadId || !visibleThreads.some((thread) => thread.id === selectedThreadId)) {
+      setSelectedThreadId(visibleThreads[0].id);
     }
-  }, [selectedThreadId, state.threads]);
+  }, [selectedThreadId, visibleThreads]);
 
   useEffect(() => {
     if (
@@ -200,7 +210,7 @@ export default function App() {
         }}
         onThemeChange={() => setTheme((current) => nextThemePreference(current))}
         theme={theme}
-        threads={state.threads}
+        threads={visibleThreads}
       />
       {loadError && (
         <div className="vbg-custom-error-banner" role="alert">
@@ -209,7 +219,18 @@ export default function App() {
         </div>
       )}
       <div aria-busy={loading} className={`vbg-custom-workspace${loading ? " vbg-custom-is-loading" : ""}`}>
-        <ThreadSidebar isLoading={loading} threads={state.threads} selectedId={selectedThreadId} onSelect={setSelectedThreadId} />
+        <ThreadSidebar
+          activeProvider={activeProvider}
+          counts={{
+            codex: filterThreadsByProvider(state.threads, "codex").length,
+            claude: filterThreadsByProvider(state.threads, "claude").length,
+          }}
+          isLoading={loading}
+          onProviderChange={setActiveProvider}
+          threads={visibleThreads}
+          selectedId={selectedThreadId}
+          onSelect={setSelectedThreadId}
+        />
         <Timeline
           isLoading={loading || threadLoading}
           thread={selectedThread}

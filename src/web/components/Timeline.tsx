@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatExactNumber, formatPercentage, formatTokenCount } from "../formatters";
 import { eventRaw, normalizedEventType } from "../trace-event";
 import type { CompactTraceEvent, CompactTurn, Thread, Turn } from "../types";
@@ -8,6 +9,12 @@ import { Icon } from "./Icon";
 import { InlineMarkdown } from "./MarkdownContent";
 
 type DisplayTraceEvent = CompactTraceEvent & { raw?: unknown };
+
+interface SessionTooltipState {
+  above: boolean;
+  left: number;
+  top: number;
+}
 
 export { formatTokenCount } from "../formatters";
 
@@ -50,15 +57,66 @@ export function Timeline({
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
   const selectedRowRef = useRef<HTMLTableRowElement>(null);
+  const tooltipCloseTimerRef = useRef<number | undefined>(undefined);
+  const [sessionTooltip, setSessionTooltip] = useState<SessionTooltipState | null>(null);
   const rows = useMemo(
     () => turns.map((turn) => ({ turn, summary: turnSummary(turn) })),
     [turns],
   );
   const contextWindow = thread?.tokenUsage?.modelContextWindow;
   const contextTokens = thread?.tokenUsage?.last.totalTokens;
-  const contextPercentage = contextWindow && contextWindow > 0 && contextTokens !== undefined
-    ? formatPercentage(contextTokens / contextWindow)
+  const contextRatio = contextWindow && contextWindow > 0 && contextTokens !== undefined
+    ? contextTokens / contextWindow
     : undefined;
+  const contextPercentage = contextRatio !== undefined ? formatPercentage(contextRatio) : undefined;
+  const contextCapacityLevel = contextRatio !== undefined && contextRatio >= 0.95
+    ? "danger"
+    : contextRatio !== undefined && contextRatio >= 0.8
+      ? "warning"
+      : "normal";
+  const compactSessionId = thread?.id.length && thread.id.length > 9 ? `${thread.id.slice(0, 8)}…` : thread?.id;
+
+  const cancelTooltipClose = () => {
+    if (tooltipCloseTimerRef.current === undefined) return;
+    window.clearTimeout(tooltipCloseTimerRef.current);
+    tooltipCloseTimerRef.current = undefined;
+  };
+
+  const closeSessionTooltip = () => {
+    cancelTooltipClose();
+    setSessionTooltip(null);
+  };
+
+  const scheduleTooltipClose = () => {
+    cancelTooltipClose();
+    tooltipCloseTimerRef.current = window.setTimeout(() => {
+      setSessionTooltip(null);
+      tooltipCloseTimerRef.current = undefined;
+    }, 100);
+  };
+
+  const showSessionTooltip = (target: HTMLElement) => {
+    cancelTooltipClose();
+    const rect = target.getBoundingClientRect();
+    const maxWidth = Math.min(280, window.innerWidth - 24);
+    const halfWidth = maxWidth / 2;
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2, 12 + halfWidth),
+      window.innerWidth - 12 - halfWidth,
+    );
+    const above = rect.bottom + 176 > window.innerHeight;
+    setSessionTooltip({
+      above,
+      left,
+      top: above ? rect.top - 8 : rect.bottom + 8,
+    });
+  };
+
+  useEffect(() => () => cancelTooltipClose(), []);
+
+  useEffect(() => {
+    closeSessionTooltip();
+  }, [thread?.id]);
 
   useEffect(() => {
     const table = tableRef.current;
@@ -77,50 +135,82 @@ export function Timeline({
   return (
     <main aria-label="Runs" className="vbg-custom-timeline" id="main">
       <header className="vbg-custom-timeline__header">
-        <div className="vbg-custom-timeline__title">
-          {thread ? (
-            <div className="vbg-custom-thread-identity">
-              <span>Session</span>
-              <code title={thread.id}>{thread.id}</code>
-              <CopyIconButton copiedLabel="Session ID copied" copyLabel="Copy session ID" value={thread.id} />
-            </div>
-          ) : <span className="vbg-custom-timeline__placeholder">Select a session</span>}
-        </div>
         {thread && (
-          <dl aria-label="Session summary" className="vbg-custom-thread-meta">
-            <div>
-              <dt>Runs</dt>
-              <dd aria-label={isLoading ? "Loading runs" : `${turns.length} ${turns.length === 1 ? "run" : "runs"}`}>
-                {isLoading ? "…" : turns.length}
-              </dd>
-            </div>
-            {thread.tokenUsage && (
-              <>
-                <div>
-                  <dt>Tokens</dt>
-                  <dd
-                    aria-label={`${formatExactNumber(thread.tokenUsage.total.totalTokens)} total tokens`}
-                    title={`${formatExactNumber(thread.tokenUsage.total.totalTokens)} tokens`}
-                  >
-                    {formatTokenCount(thread.tokenUsage.total.totalTokens)}
-                  </dd>
-                </div>
-                {contextPercentage && contextWindow !== undefined && contextTokens !== undefined && (
-                  <div>
-                    <dt>Context</dt>
-                    <dd
-                      aria-label={`${formatExactNumber(contextTokens)} of ${formatExactNumber(contextWindow)} context tokens, ${contextPercentage}`}
-                      title={`${formatExactNumber(contextTokens)} / ${formatExactNumber(contextWindow)} tokens (${contextPercentage})`}
-                    >
-                      {contextPercentage}
-                    </dd>
-                  </div>
-                )}
-              </>
-            )}
-          </dl>
+          <div className="vbg-custom-session-summary">
+            <button
+              aria-describedby={sessionTooltip ? "session-summary-tooltip" : undefined}
+              aria-label={`Session details for ${thread.id}`}
+              className="vbg-custom-session-summary__trigger"
+              onBlur={closeSessionTooltip}
+              onClick={(event) => showSessionTooltip(event.currentTarget)}
+              onFocus={(event) => showSessionTooltip(event.currentTarget)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") closeSessionTooltip();
+              }}
+              onMouseEnter={(event) => showSessionTooltip(event.currentTarget)}
+              onMouseLeave={(event) => {
+                if (document.activeElement !== event.currentTarget) scheduleTooltipClose();
+              }}
+              type="button"
+            >
+              <span className="vbg-custom-session-summary__runs">
+                {isLoading ? "…" : `${turns.length} ${turns.length === 1 ? "run" : "runs"}`}
+              </span>
+              {contextPercentage && (
+                <span className={`vbg-custom-session-summary__context vbg-custom-session-summary__context--${contextCapacityLevel}`}>
+                  {contextPercentage}
+                </span>
+              )}
+              <code className="vbg-custom-compact-id" title={thread.id}>{compactSessionId}</code>
+            </button>
+            <CopyIconButton copiedLabel="Session ID copied" copyLabel="Copy session ID" value={thread.id} />
+          </div>
+        )}
+        {!thread && <span className="vbg-custom-timeline__placeholder">Select a session</span>}
+        {contextRatio !== undefined && (
+          <span
+            aria-hidden="true"
+            className={`vbg-custom-context-capacity vbg-custom-context-capacity--${contextCapacityLevel}`}
+          >
+            <span style={{ width: `${Math.min(contextRatio, 1) * 100}%` }} />
+          </span>
         )}
       </header>
+
+      {thread && sessionTooltip && typeof document !== "undefined" && createPortal(
+        <div
+          className={`vbg-custom-session-tooltip${sessionTooltip.above ? " vbg-custom-session-tooltip--above" : ""}`}
+          id="session-summary-tooltip"
+          onMouseEnter={cancelTooltipClose}
+          onMouseLeave={scheduleTooltipClose}
+          role="tooltip"
+          style={{ left: sessionTooltip.left, top: sessionTooltip.top }}
+        >
+          <dl aria-label="Session details">
+            <div>
+              <dt>Session</dt>
+              <dd><code>{thread.id}</code></dd>
+            </div>
+            <div>
+              <dt>Runs</dt>
+              <dd>{isLoading ? "Loading…" : turns.length}</dd>
+            </div>
+            <div>
+              <dt>Tokens</dt>
+              <dd>{thread.tokenUsage ? formatExactNumber(thread.tokenUsage.total.totalTokens) : "—"}</dd>
+            </div>
+            <div>
+              <dt>Context</dt>
+              <dd>
+                {contextPercentage && contextWindow !== undefined && contextTokens !== undefined
+                  ? `${formatExactNumber(contextTokens)} / ${formatExactNumber(contextWindow)} · ${contextPercentage}`
+                  : "—"}
+              </dd>
+            </div>
+          </dl>
+        </div>,
+        document.body,
+      )}
 
       <table aria-busy={isLoading} className="vbg-custom-event-table" ref={tableRef}>
         <caption className="vbg-custom-sr-only">Session runs</caption>
@@ -173,7 +263,13 @@ export function Timeline({
         {isLoading
           ? "Loading session history…"
           : thread
-            ? `Showing ${turns.length} run${turns.length === 1 ? "" : "s"} · ${thread.historySource === "rollout-file" ? "Rollout fallback" : "App Server"}`
+            ? `Showing ${turns.length} run${turns.length === 1 ? "" : "s"} · ${
+              thread.historySource === "rollout-file"
+                ? "Rollout fallback"
+                : thread.historySource === "claude"
+                  ? "Claude sessions"
+                  : "App Server"
+            }`
             : "Select a session to view runs"}
       </footer>
     </main>

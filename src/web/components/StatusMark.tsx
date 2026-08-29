@@ -3,7 +3,8 @@ import { Icon } from "./Icon";
 export function statusTone(status: string): string {
   const normalized = status.toLowerCase();
   if (["completed", "complete", "approved", "connected"].includes(normalized)) return "success";
-  if (["pending", "blocked", "approval", "review_required"].includes(normalized)) return "warning";
+  if (["interrupted", "timed out", "blocked", "approval", "review_required"].includes(normalized)) return "warning";
+  if (["pending", "wait ended"].includes(normalized)) return "neutral";
   if (["error", "failed", "disconnected"].includes(normalized)) return "danger";
   return "active";
 }

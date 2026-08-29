@@ -1,13 +1,15 @@
 {
-  "name": "thread-scope",
+  "name": "takotrace",
   "version": "0.1.0",
-  "description": "Local realtime viewer for Codex app-server threads",
+  "description": "Local-first session inspector and execution tracer for Codex and Claude agents",
   "type": "module",
   "bin": {
-    "thread-scope": "dist/cli.js"
+    "takotrace": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "assets",
+    "dist",
+    "README.zh-CN.md"
   ],
   "engines": {
     "node": ">=22"
@@ -22,6 +24,7 @@
     "test": "vitest run --root ."
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.250",
     "@antv/g6": "^5.1.1",
     "highlight.js": "^11.12.0",
     "react": "^19.1.1",

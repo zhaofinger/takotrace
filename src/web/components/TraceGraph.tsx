@@ -1,11 +1,10 @@
 import { Graph, NodeEvent } from "@antv/g6";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EventDetails } from "./EventDetails";
-import { FlowViewToolbar } from "./FlowViewToolbar";
 import { flowNode } from "./InteractionFlow";
 import type { FlowEvent } from "./InteractionFlow";
 import { traceGraphModel } from "./trace-graph-model";
-import type { GraphDensity, TraceGraphNode } from "./trace-graph-model";
+import type { TraceGraphNode } from "./trace-graph-model";
 import { graphNodeVisual, isPrimaryGraphKind } from "./trace-graph-visual";
 import { StatusMark } from "./StatusMark";
 
@@ -83,18 +82,17 @@ const LEGEND = [
 export default function TraceGraph({ items }: { items: FlowEvent[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | undefined>(undefined);
-  const [density, setDensity] = useState<GraphDensity>("key");
-  const liveModel = useMemo(() => traceGraphModel(items, density), [density, items]);
+  const liveModel = useMemo(() => traceGraphModel(items), [items]);
   const [deferredModel, setDeferredModel] = useState<typeof liveModel>();
-  const model = deferredModel ?? { nodes: [], edges: [], total: liveModel.total };
+  const model = deferredModel ?? { nodes: [], edges: [] };
   const [selectedId, setSelectedId] = useState<string>();
   const [themeRevision, setThemeRevision] = useState(0);
   const selected = model.nodes.find((node) => node.id === selectedId) ?? model.nodes[0];
 
   useEffect(() => {
     const handleThemeChange = () => setThemeRevision((current) => current + 1);
-    window.addEventListener("threadscope:themechange", handleThemeChange);
-    return () => window.removeEventListener("threadscope:themechange", handleThemeChange);
+    window.addEventListener("takotrace:themechange", handleThemeChange);
+    return () => window.removeEventListener("takotrace:themechange", handleThemeChange);
   }, []);
 
   useEffect(() => {
@@ -232,20 +230,13 @@ export default function TraceGraph({ items }: { items: FlowEvent[] }) {
 
   return (
     <section className="vbg-custom-trace-graph" aria-label="Conversation graph">
-      <FlowViewToolbar
-        checked={density === "all"}
-        className="vbg-custom-graph-toolbar"
-        label="Show all graph events"
-        onChange={(checked) => setDensity(checked ? "all" : "key")}
-        total={model.total}
-        visible={model.nodes.length}
-      >
+      <header className="vbg-custom-graph-toolbar">
         <div className="vbg-custom-graph-controls">
           <button aria-label="Zoom out" onClick={() => zoom(0.8)} type="button">−</button>
           <button aria-label="Fit graph" onClick={() => void graphRef.current?.fitView({}, { duration: 180 })} type="button">Fit</button>
           <button aria-label="Zoom in" onClick={() => zoom(1.25)} type="button">+</button>
         </div>
-      </FlowViewToolbar>
+      </header>
       <div aria-label="Graph node legend" className="vbg-custom-graph-legend">
         {LEGEND.map(([kind, text]) => (
           <span className={isPrimaryGraphKind(kind) ? "vbg-custom-is-primary" : undefined} key={kind}>

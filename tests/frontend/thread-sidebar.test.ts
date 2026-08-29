@@ -37,6 +37,25 @@ describe('ThreadSidebar', () => {
     expect(markup).toContain('Group by time');
     expect(markup).not.toContain('Filter threads');
     expect(markup).not.toContain('type="search"');
+    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('aria-label="Session provider"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('Codex');
+    expect(markup).toContain('Claude');
+  });
+
+  it('renders provider counts and selects the active provider tab', () => {
+    const markup = renderToStaticMarkup(createElement(ThreadSidebar, {
+      activeProvider: 'claude',
+      counts: { codex: 12, claude: 7 },
+      onProviderChange: () => undefined,
+      onSelect: () => undefined,
+      threads: [],
+    }));
+
+    expect(markup).toContain('>12<');
+    expect(markup).toContain('>7<');
+    expect(markup).toMatch(/aria-selected="true"[^>]*><span>Claude<\/span>/);
   });
 
   it('sorts threads into local time groups with stable invalid-date fallback', () => {

@@ -1,9 +1,26 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DetailPanel, formatDuration, formatTokenCount } from "../../src/web/components/DetailPanel";
+import {
+  DetailPanel,
+  formatDuration,
+  formatTokenCount,
+  subagentNavigation,
+  tokenBreakdownMetrics,
+} from "../../src/web/components/DetailPanel";
 
 describe("DetailPanel polish", () => {
+  it("opens subagent details in the source view and restores its selection id", () => {
+    expect(subagentNavigation("trace", "event-7")).toEqual({
+      sourceSelectionId: "event-7",
+      tab: "trace",
+    });
+    expect(subagentNavigation("sequence", "event-7")).toEqual({
+      sourceSelectionId: "seq-event-7",
+      tab: "sequence",
+    });
+  });
+
   it("formats durations for quick scanning while preserving short values", () => {
     expect(formatDuration()).toBe("—");
     expect(formatDuration(420)).toBe("420ms");
@@ -24,15 +41,18 @@ describe("DetailPanel polish", () => {
     expect(markup).toContain('id="turn-json-tab"');
     expect(markup).not.toContain('id="turn-events-tab"');
     const tabs = markup.match(/<button[^>]+role="tab"[^>]*>/g) ?? [];
+    expect(tabs[0]).toContain('id="turn-sequence-tab"');
+    expect(tabs[1]).toContain('id="turn-trace-tab"');
     expect(tabs.filter((tab) => tab.includes('tabindex="0"'))).toHaveLength(1);
     expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(2);
   });
 
-  it("renders a lightweight wrapping summary without the repeated thread id", () => {
+  it("renders a compact single-line summary without the repeated thread id", () => {
     const markup = renderToStaticMarkup(createElement(DetailPanel, {
       turn: {
         id: "turn-full-id",
         status: "completed",
+        model: "gpt-5.6-sol",
         startedAt: "2026-01-01T00:00:00.000Z",
         completedAt: "2026-01-01T00:00:01.000Z",
         items: [],
@@ -42,16 +62,21 @@ describe("DetailPanel polish", () => {
     expect(markup).toContain('class="vbg-custom-turn-summary"');
     expect(markup).toContain('class="vbg-custom-turn-overview"');
     expect(markup).toContain('class="vbg-custom-turn-summary__utilities"');
-    expect(markup).toContain('class="vbg-custom-turn-overview vbg-custom-turn-overview--utilities"');
+    expect(markup).toContain('class="vbg-custom-run-identity"');
+    expect(markup).not.toContain('vbg-custom-turn-overview--utilities');
     expect(markup).toContain('<dt>Status</dt>');
+    expect(markup).toContain('<dt>Model</dt>');
+    expect(markup).toContain('class="vbg-custom-model-name" title="gpt-5.6-sol">gpt-5.6-sol</code>');
     expect(markup).toContain('<dt>Started</dt>');
+    expect(markup).toContain('<time dateTime="2026-01-01T00:00:00.000Z" title=');
+    expect(markup).not.toContain('>2026-01-01T00:00:00.000Z</time>');
     expect(markup).toContain('<dt>Duration</dt>');
     expect(markup).toContain('<dt>Steps</dt>');
-    expect(markup).toContain('<dt>Run</dt>');
+    expect(markup).not.toContain('<dt>Run</dt>');
     expect(markup).not.toContain('<dt>Ended</dt>');
     expect(markup).not.toContain('<dt>Thread</dt>');
     expect(markup).toContain('title="turn-full-id"');
-    expect(markup).toContain('<code aria-label="Run turn-full-id" title="turn-full-id">turn-ful…</code>');
+    expect(markup).toContain('<code aria-label="Run turn-full-id" class="vbg-custom-compact-id" title="turn-full-id">turn-ful…</code>');
     expect(markup).toContain('aria-label="Copy run ID"');
     expect(markup).toContain('class="vbg-custom-id-copy"');
     expect(markup).not.toContain('<details');
@@ -73,59 +98,64 @@ describe("DetailPanel polish", () => {
     expect(markup).not.toContain('class="vbg-custom-detail-state">Loading full run detail…</p>');
   });
 
-  it("shows the selected turn token breakdown with exact values", () => {
+  it("omits the model fact when the run did not record one", () => {
+    const markup = renderToStaticMarkup(createElement(DetailPanel, {
+      turn: { id: "turn-without-model", status: "completed", items: [] },
+    }));
+
+    expect(markup).not.toContain("<dt>Model</dt>");
+  });
+
+  it("renders a compact token trigger and exposes ordered detail metrics", () => {
+    const usage = {
+      inputTokens: 18_500,
+      cachedInputTokens: 12_000,
+      cacheWriteInputTokens: 1_250,
+      outputTokens: 2_000,
+      reasoningOutputTokens: 750,
+      totalTokens: 20_500,
+    };
     const markup = renderToStaticMarkup(createElement(DetailPanel, {
       turn: {
         id: "turn-usage",
         status: "completed",
         items: [],
-        tokenUsage: {
-          inputTokens: 18_500,
-          cachedInputTokens: 12_000,
-          cacheWriteInputTokens: 1_250,
-          outputTokens: 2_000,
-          reasoningOutputTokens: 750,
-          totalTokens: 20_500,
-        },
+        tokenUsage: usage,
       },
     }));
 
-    expect(markup).toContain('aria-labelledby="turn-token-usage-heading"');
-    expect(markup).toContain('<span id="turn-token-usage-heading">Token usage</span>');
-    expect(markup).toContain('<details>');
-    expect(markup).toContain('<summary>');
-    expect(markup).toContain('<dt>Input</dt>');
-    expect(markup).toContain('<dt>Cached</dt>');
-    expect(markup).toContain('<dt>Cache write</dt>');
-    expect(markup).toContain('<dt>Output</dt>');
-    expect(markup).toContain('<dt>Reasoning</dt>');
-    expect(markup).not.toContain('<dt>Total</dt>');
-    expect(markup).toContain('aria-label="18,500 input tokens"');
-    expect(markup).toContain('aria-label="20,500 total tokens" title="20,500 tokens">20.5K</strong>');
+    expect(markup).toContain('<section aria-label="Token usage"');
+    expect(markup).toContain('aria-controls="turn-token-usage-popover"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('aria-label="Token usage, 20,500 total tokens"');
+    expect(markup).toContain('<strong>20.5K</strong>');
+    expect(markup).toContain('class="vbg-custom-turn-token-usage__label">tokens</span>');
     expect(markup).toContain('class="vbg-custom-turn-token-usage__disclosure"');
+    expect(markup).not.toContain('<details');
+    expect(markup).not.toContain('<dt>Input</dt>');
+    expect(tokenBreakdownMetrics(usage)).toEqual([
+      { key: "inputTokens", label: "Input", value: 18_500 },
+      { key: "outputTokens", label: "Output", value: 2_000 },
+      { key: "cachedInputTokens", label: "Cached", value: 12_000 },
+      { key: "reasoningOutputTokens", label: "Reasoning", value: 750 },
+      { key: "cacheWriteInputTokens", label: "Cache write", value: 1_250 },
+    ]);
   });
 
   it("omits empty token UI and zero cache-write usage", () => {
     const withoutUsage = renderToStaticMarkup(createElement(DetailPanel, {
       turn: { id: "turn-empty", status: "completed", items: [] },
     }));
-    const withoutCacheWrite = renderToStaticMarkup(createElement(DetailPanel, {
-      turn: {
-        id: "turn-no-cache-write",
-        status: "completed",
-        items: [],
-        tokenUsage: {
-          inputTokens: 100,
-          cachedInputTokens: 0,
-          cacheWriteInputTokens: 0,
-          outputTokens: 20,
-          reasoningOutputTokens: 0,
-          totalTokens: 120,
-        },
-      },
-    }));
+    const metrics = tokenBreakdownMetrics({
+      inputTokens: 100,
+      cachedInputTokens: 0,
+      cacheWriteInputTokens: 0,
+      outputTokens: 20,
+      reasoningOutputTokens: 0,
+      totalTokens: 120,
+    });
 
-    expect(withoutUsage).not.toContain('turn-token-usage-heading');
-    expect(withoutCacheWrite).not.toContain('<dt>Cache write</dt>');
+    expect(withoutUsage).not.toContain('aria-label="Token usage"');
+    expect(metrics).not.toContainEqual(expect.objectContaining({ label: "Cache write" }));
   });
 });

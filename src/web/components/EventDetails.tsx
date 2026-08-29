@@ -1,5 +1,5 @@
-import type { CompactTraceEvent, TraceEvent } from "../types";
-import { eventRaw, normalizedEventType } from "../trace-event";
+import type { CompactTraceEvent, ThreadDetail, TraceEvent } from "../types";
+import { eventRaw, normalizedEventType, traceEventId } from "../trace-event";
 import { asRecord as record, nonEmptyText as text, type UnknownRecord } from "../value-utils";
 import { commandText, workingDirectoryText } from "./command-display";
 import { HighlightedCode, languageForPath } from "./HighlightedCode";
@@ -10,6 +10,13 @@ import { SubagentThreadDetails } from "./SubagentThreadDetails";
 
 type DetailEvent = CompactTraceEvent | TraceEvent;
 type RecordValue = UnknownRecord;
+
+export type SubagentDetailView = "trace" | "sequence";
+export type OpenSubagentHandler = (
+  thread: ThreadDetail,
+  sourceEventId: string,
+  sourceView: SubagentDetailView,
+) => void;
 
 export { eventRaw } from "../trace-event";
 
@@ -68,7 +75,7 @@ function CommandDetails({ raw }: { raw: RecordValue }) {
   );
 }
 
-function McpDetails({ raw }: { raw: RecordValue }) {
+function McpDetails({ expandResult = false, raw }: { expandResult?: boolean; raw: RecordValue }) {
   const args = record(raw.arguments);
   const code = text(args.code) ?? text(args.function);
   const title = text(args.title);
@@ -94,7 +101,7 @@ function McpDetails({ raw }: { raw: RecordValue }) {
       )}
       {error && <p className="vbg-custom-event-error" role="alert">{error}</p>}
       {content.length > 0 && (
-        <details className="vbg-custom-event-disclosure">
+        <details className="vbg-custom-event-disclosure" open={expandResult}>
           <summary>Result · {content.length} block{content.length === 1 ? "" : "s"}</summary>
           <div className="vbg-custom-event-results">
             {content.map((block, index) => {
@@ -180,22 +187,27 @@ function WebSearchDetails({ raw }: { raw: RecordValue }) {
   );
 }
 
-function SubagentDetails({ raw }: { raw: RecordValue }) {
-  const receivers = Array.isArray(raw.receiverThreadIds) ? raw.receiverThreadIds.join(", ") : undefined;
+function SubagentDetails({
+  autoLoad,
+  detailView,
+  event,
+  raw,
+  onOpenSubagent,
+}: {
+  autoLoad: boolean;
+  detailView: SubagentDetailView;
+  event: DetailEvent;
+  raw: RecordValue;
+  onOpenSubagent?: OpenSubagentHandler;
+}) {
   return (
     <div className="vbg-custom-event-detail">
-      {text(raw.prompt) && <p className="vbg-custom-event-lede">{text(raw.prompt)}</p>}
-      <FieldList fields={[
-        ["Action", raw.tool ?? raw.kind],
-        ["Agent", raw.agentPath],
-        ["Session", raw.agentThreadId],
-        ["Targets", receivers],
-        ["Model", raw.model],
-        ["Reasoning", raw.reasoningEffort],
-      ]} />
       <SubagentThreadDetails
+        autoLoad={autoLoad}
+        detailView={detailView}
+        fallbackInput={text(raw.prompt)}
+        onOpenThread={(thread) => onOpenSubagent?.(thread, traceEventId(event), detailView)}
         raw={raw}
-        renderEventDetails={(event) => <EventDetails event={event} fallback={event.summary} />}
       />
     </div>
   );
@@ -227,16 +239,40 @@ function UserMessageDetails({ event, fallback, raw }: { event: DetailEvent; fall
   );
 }
 
-export function EventDetails({ event, fallback }: { event: DetailEvent; fallback: string }) {
+export function EventDetails({
+  autoLoadSubagent = false,
+  event,
+  expandResult = false,
+  fallback,
+  onOpenSubagent,
+  subagentView = "trace",
+}: {
+  autoLoadSubagent?: boolean;
+  event: DetailEvent;
+  expandResult?: boolean;
+  fallback: string;
+  onOpenSubagent?: OpenSubagentHandler;
+  subagentView?: SubagentDetailView;
+}) {
   const raw = eventRaw(event);
   const type = normalizedEventType(event);
 
   if (type === "usermessage") return <UserMessageDetails event={event} fallback={fallback} raw={raw} />;
   if (type === "commandexecution") return <CommandDetails raw={raw} />;
-  if (type === "mcptoolcall") return <McpDetails raw={raw} />;
+  if (type === "mcptoolcall") return <McpDetails expandResult={expandResult} raw={raw} />;
   if (type === "filechange") return <FileChangeDetails fallback={fallback} raw={raw} />;
   if (type.includes("websearch")) return <WebSearchDetails raw={raw} />;
-  if (type === "subagentactivity" || type === "collabagenttoolcall") return <SubagentDetails raw={raw} />;
+  if (type === "subagentactivity" || type === "collabagenttoolcall") {
+    return (
+      <SubagentDetails
+        autoLoad={autoLoadSubagent}
+        detailView={subagentView}
+        event={event}
+        onOpenSubagent={onOpenSubagent}
+        raw={raw}
+      />
+    );
+  }
   if (type === "imageview") return <FieldList fields={[["Image", raw.path]]} />;
   if (type === "imagegeneration") return <FieldList fields={[["Saved path", raw.savedPath], ["Prompt", raw.revisedPrompt]]} />;
   return <MarkdownContent>{fallback}</MarkdownContent>;

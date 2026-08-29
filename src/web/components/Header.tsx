@@ -35,7 +35,10 @@ export function Header({
 
   return (
     <header className="vbg-custom-topbar">
-      <h1>ThreadScope</h1>
+      <div className="vbg-custom-brand">
+        <span aria-hidden="true" className="vbg-custom-brand-mark" />
+        <h1>TakoTrace</h1>
+      </div>
       <GlobalSearch
         onSelectThread={onSelectThread}
         onSelectTurn={onSelectTurn}
@@ -48,6 +51,7 @@ export function Header({
           </summary>
           <dl>
             <div><dt>Mode</dt><dd>{isConnected ? "Desktop snapshots · near real-time" : "Snapshot connection"}</dd></div>
+            {connection.provider && <div><dt>Provider</dt><dd>{connection.provider}</dd></div>}
             {connection.userAgent && <div><dt>Client</dt><dd>{connection.userAgent}</dd></div>}
           </dl>
         </details>
