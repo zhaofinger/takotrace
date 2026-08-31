@@ -80,10 +80,12 @@ export function searchThreadsAndTurns(threads: Thread[], query: string): GlobalS
 }
 
 export function GlobalSearch({
+  onOpenChange,
   onSelectThread,
   onSelectTurn,
   threads,
 }: {
+  onOpenChange?: (isOpen: boolean) => void;
   onSelectThread: (threadId: string) => void;
   onSelectTurn: (threadId: string, turnId: string) => void;
   threads: Thread[];
@@ -103,6 +105,7 @@ export function GlobalSearch({
   const optionId = (index: number) => `${resultsId}-option-${index}`;
 
   useEffect(() => setActiveIndex(-1), [results]);
+  useEffect(() => onOpenChange?.(isOpen), [isOpen, onOpenChange]);
 
   const finishSelection = (select: () => void) => {
     select();

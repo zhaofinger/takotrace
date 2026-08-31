@@ -6,6 +6,8 @@ import { Icon } from "./Icon";
 
 const COLLAPSED_THREAD_COUNT = 5;
 const COLLAPSED_TIME_THREAD_COUNT = 20;
+const PROVIDER_TAB_ID_PREFIX = "session-provider-tab";
+const PROVIDER_PANEL_ID_PREFIX = "session-provider-panel";
 
 interface ThreadGroup {
   cwd: string;
@@ -97,14 +99,17 @@ export function ThreadSidebar({
   const allTimeGroups = useMemo(() => buildTimeGroups(threads), [threads]);
   const selectGroups = sortByTime ? allTimeGroups : projectGroups;
   const hasMoreTimeThreads = visibleTimeCount < threads.length;
+  const inactiveProvider: SessionProvider = activeProvider === "codex" ? "claude" : "codex";
 
   return (
     <aside aria-busy={isLoading} className="vbg-custom-threads" aria-label="Sessions">
       <div aria-label="Session provider" className="vbg-custom-provider-tabs" role="tablist">
         {(["codex", "claude"] as const).map((provider) => (
           <button
+            aria-controls={`${PROVIDER_PANEL_ID_PREFIX}-${provider}`}
             aria-selected={activeProvider === provider}
             className={activeProvider === provider ? "vbg-custom-is-selected" : undefined}
+            id={`${PROVIDER_TAB_ID_PREFIX}-${provider}`}
             key={provider}
             onClick={() => onProviderChange?.(provider)}
             onKeyDown={handleRovingTabKey}
@@ -117,6 +122,12 @@ export function ThreadSidebar({
           </button>
         ))}
       </div>
+      <div
+        aria-labelledby={`${PROVIDER_TAB_ID_PREFIX}-${activeProvider}`}
+        className="vbg-custom-provider-panel"
+        id={`${PROVIDER_PANEL_ID_PREFIX}-${activeProvider}`}
+        role="tabpanel"
+      >
       {threads.length > 0 && (
         <label className="vbg-custom-thread-select-wrap">
           <span className="vbg-custom-sr-only">Select session</span>
@@ -271,6 +282,13 @@ export function ThreadSidebar({
           </div>
         )}
       </div>
+      </div>
+      <div
+        aria-labelledby={`${PROVIDER_TAB_ID_PREFIX}-${inactiveProvider}`}
+        hidden
+        id={`${PROVIDER_PANEL_ID_PREFIX}-${inactiveProvider}`}
+        role="tabpanel"
+      />
     </aside>
   );
 }

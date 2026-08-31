@@ -43,9 +43,10 @@ describe('turnSummary', () => {
     expect(markup).not.toContain('No runs in this session');
   });
 
-  it('renders a compact headerless row without a timestamp', () => {
+  it('renders a compact headerless row with a status mark and start time', () => {
     const markup = renderToStaticMarkup(createElement(Timeline, {
       onSelect: () => undefined,
+      selectedId: 'turn-1',
       turns: [{
         id: 'turn-1',
         status: 'completed',
@@ -58,11 +59,13 @@ describe('turnSummary', () => {
 
     expect(markup).not.toContain('<thead');
     expect(markup).toContain('title="A long user prompt"');
-    expect(markup).toContain('vbg-custom-sr-only">completed</span>');
-    expect(markup).not.toContain('vbg-custom-status__icon');
+    expect(markup).toContain('vbg-custom-status__icon');
+    expect(markup).toContain('vbg-visually-hidden">completed</span>');
     expect(markup.match(/<td/g)).toHaveLength(1);
-    expect(markup).not.toContain('vbg-custom-event-row__time');
-    expect(markup).not.toContain('2026-01-01T08:30:00.000Z');
+    expect(markup).toContain('class="vbg-custom-event-row__time"');
+    expect(markup).toContain('dateTime="2026-01-01T08:30:00.000Z"');
+    expect(markup).not.toContain('aria-selected=');
+    expect(markup).toContain('aria-current=');
   });
 
   it('renders turn summaries as non-interactive inline Markdown', () => {
@@ -205,7 +208,7 @@ describe('turnSummary', () => {
     expect(markup.indexOf('vbg-custom-session-summary__runs')).toBeLessThan(markup.indexOf('vbg-custom-session-summary__context'));
     expect(markup.indexOf('vbg-custom-session-summary__context')).toBeLessThan(markup.indexOf('vbg-custom-compact-id'));
     expect(markup).toContain('vbg-custom-context-capacity--normal');
-    expect(markup).toContain('style="width:25%"');
+    expect(markup).toContain('style="--vbg-context-capacity-scale:0.25"');
     expect(markup).not.toContain('128.5K');
     expect(markup).not.toContain('32K / 128K');
   });
@@ -230,10 +233,10 @@ describe('turnSummary', () => {
   });
 
   it.each([
-    [80, 'warning', '80%'],
-    [95, 'danger', '95%'],
-    [120, 'danger', '100%'],
-  ])('uses semantic context capacity styling at %i%% usage', (totalTokens, level, trackWidth) => {
+    [80, 'warning', 0.8],
+    [95, 'danger', 0.95],
+    [120, 'danger', 1],
+  ])('uses semantic context capacity styling at %i%% usage', (totalTokens, level, trackScale) => {
     const usage = tokenUsage(totalTokens);
     const thread: Thread = {
       id: `thread-context-${totalTokens}`,
@@ -252,7 +255,7 @@ describe('turnSummary', () => {
     }));
 
     expect(markup).toContain(`vbg-custom-context-capacity--${level}`);
-    expect(markup).toContain(`style="width:${trackWidth}"`);
+    expect(markup).toContain(`style="--vbg-context-capacity-scale:${trackScale}"`);
   });
 
   it('does not claim an App Server source before a session is selected', () => {

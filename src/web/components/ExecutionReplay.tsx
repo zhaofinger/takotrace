@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatClockTime as formatTime, formatCompactDuration as formatDuration } from "../formatters";
 import { timestampMs as timestamp } from "../trace-event";
 import { EventDetails, type OpenSubagentHandler } from "./EventDetails";
-import { ExecutionInspector, type ExecutionInspectorItem } from "./ExecutionInspector";
+import {
+  ExecutionInspector,
+  restoreFocusAfterInspectorClose,
+  type ExecutionInspectorItem,
+} from "./ExecutionInspector";
 import { flowKindIconName } from "./InteractionFlow";
 import type { FlowEvent, FlowKind } from "./InteractionFlow";
 import { Icon } from "./Icon";
@@ -425,7 +429,7 @@ export default function ExecutionReplay({
     const actionId = selectedAction?.id;
     setSelectedId(undefined);
     if (actionId) {
-      requestAnimationFrame(() => document.getElementById(`replay-action-trigger-${actionId}`)?.focus());
+      restoreFocusAfterInspectorClose(`replay-action-trigger-${actionId}`);
     }
   };
 

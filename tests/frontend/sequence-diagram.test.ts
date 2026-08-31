@@ -1,7 +1,10 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { ExecutionInspector } from "../../src/web/components/ExecutionInspector";
+import { describe, expect, it, vi } from "vitest";
+import {
+  ExecutionInspector,
+  restoreFocusAfterInspectorClose,
+} from "../../src/web/components/ExecutionInspector";
 import type { FlowEvent } from "../../src/web/components/InteractionFlow";
 import {
   nextSequenceStepIndex,
@@ -198,8 +201,27 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain("TOOL");
     expect(markup).toContain(`<strong title="${step.detailTitle}">${step.displayTitle}</strong>`);
     expect(markup).toContain('role="tabpanel"');
+    expect(markup).toContain('autofocus=""');
     expect(markup).toContain("Content");
     expect(markup).toContain("working tree clean");
+  });
+
+  it("restores focus to the selected step after the inspector closes", () => {
+    const focus = vi.fn();
+    const getElementById = vi.fn(() => ({ focus }));
+    const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal("document", { getElementById });
+    vi.stubGlobal("window", { requestAnimationFrame });
+
+    restoreFocusAfterInspectorClose("sequence-step-2");
+
+    expect(requestAnimationFrame).toHaveBeenCalledOnce();
+    expect(getElementById).toHaveBeenCalledWith("sequence-step-2");
+    expect(focus).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
   });
 
   it("keeps a subagent drawer to basic timing, input, and result information", () => {

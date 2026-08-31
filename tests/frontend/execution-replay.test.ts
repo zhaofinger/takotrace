@@ -230,6 +230,7 @@ describe("ExecutionReplay waterfall", () => {
     expect(inspectorMarkup).not.toContain("Collapse action details");
     expect(inspectorMarkup).not.toContain("Expand action details");
     expect(inspectorMarkup).toContain("Close execution details");
+    expect(inspectorMarkup).toContain('autofocus=""');
     expect(inspectorMarkup).toContain('<details class="vbg-custom-event-disclosure" open="">');
     expect(inspectorMarkup).toContain("Result · 1 block");
     expect(inspectorMarkup).toContain("done");

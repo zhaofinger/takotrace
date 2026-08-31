@@ -25,6 +25,10 @@ export interface ExecutionInspectorItem {
   event: FlowEvent;
 }
 
+export function restoreFocusAfterInspectorClose(elementId: string) {
+  window.requestAnimationFrame(() => document.getElementById(elementId)?.focus());
+}
+
 function InspectorValue({ value }: { value: unknown }) {
   const isText = typeof value === "string";
   let code: string;
@@ -83,6 +87,7 @@ export function ExecutionInspector({
         <div className="vbg-custom-sequence__inspector-actions">
           <StatusMark status={statusLabel} />
           <button
+            autoFocus
             type="button"
             className="vbg-custom-sequence__inspector-close"
             onClick={onClose}

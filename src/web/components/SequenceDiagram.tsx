@@ -8,7 +8,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useClipboardCopy } from "../useClipboardCopy";
-import { ExecutionInspector, type ExecutionInspectorItem } from "./ExecutionInspector";
+import {
+  ExecutionInspector,
+  restoreFocusAfterInspectorClose,
+  type ExecutionInspectorItem,
+} from "./ExecutionInspector";
 import type { OpenSubagentHandler } from "./EventDetails";
 import type { FlowEvent } from "./InteractionFlow";
 import { Icon } from "./Icon";
@@ -114,7 +118,7 @@ export function SequenceDiagram({
     if (!selectedStep) return;
     const stepButtonId = `sequence-step-${selectedStep.seq}`;
     setSelectedStepId(null);
-    window.requestAnimationFrame(() => document.getElementById(stepButtonId)?.focus());
+    restoreFocusAfterInspectorClose(stepButtonId);
   };
 
   const showStepTooltip = (target: HTMLElement, step: SequenceStep) => {

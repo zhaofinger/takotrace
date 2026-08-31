@@ -41,8 +41,8 @@ describe("DetailPanel polish", () => {
     expect(markup).toContain('id="turn-json-tab"');
     expect(markup).not.toContain('id="turn-events-tab"');
     const tabs = markup.match(/<button[^>]+role="tab"[^>]*>/g) ?? [];
-    expect(tabs[0]).toContain('id="turn-sequence-tab"');
-    expect(tabs[1]).toContain('id="turn-trace-tab"');
+    expect(tabs[0]).toContain('id="turn-trace-tab"');
+    expect(tabs[1]).toContain('id="turn-sequence-tab"');
     expect(tabs.filter((tab) => tab.includes('tabindex="0"'))).toHaveLength(1);
     expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(2);
   });

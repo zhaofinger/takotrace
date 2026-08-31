@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { formatExactNumber, formatPercentage, formatTokenCount } from "../formatters";
+import { formatClockTime, formatDateTime, formatExactNumber, formatPercentage, formatTokenCount } from "../formatters";
 import { eventRaw, normalizedEventType } from "../trace-event";
 import type { CompactTraceEvent, CompactTurn, Thread, Turn } from "../types";
 import { asRecord, nonEmptyText } from "../value-utils";
 import { CopyIconButton } from "./CopyIconButton";
 import { Icon } from "./Icon";
 import { InlineMarkdown } from "./MarkdownContent";
+import { StatusMark } from "./StatusMark";
 
 type DisplayTraceEvent = CompactTraceEvent & { raw?: unknown };
 
@@ -172,7 +174,9 @@ export function Timeline({
             aria-hidden="true"
             className={`vbg-custom-context-capacity vbg-custom-context-capacity--${contextCapacityLevel}`}
           >
-            <span style={{ width: `${Math.min(contextRatio, 1) * 100}%` }} />
+            <span
+              style={{ "--vbg-context-capacity-scale": Math.min(contextRatio, 1) } as CSSProperties}
+            />
           </span>
         )}
       </header>
@@ -217,7 +221,6 @@ export function Timeline({
         <tbody className="vbg-custom-event-table__body">
           {rows.map(({ turn, summary }) => (
             <tr
-              aria-selected={turn.id === selectedId}
               className={`vbg-custom-event-row${turn.id === selectedId ? " vbg-custom-is-selected" : ""}`}
               key={turn.id}
               onClick={() => onSelect(turn)}
@@ -229,8 +232,17 @@ export function Timeline({
                   className="vbg-custom-event-row__select"
                   type="button"
                 >
-                  <InlineMarkdown>{summary}</InlineMarkdown>
-                  <span className="vbg-custom-sr-only">{turn.status}</span>
+                  <StatusMark label={false} status={turn.status} />
+                  <span className="vbg-custom-event-row__title"><InlineMarkdown>{summary}</InlineMarkdown></span>
+                  {turn.startedAt && (
+                    <time
+                      className="vbg-custom-event-row__time"
+                      dateTime={turn.startedAt}
+                      title={formatDateTime(turn.startedAt)}
+                    >
+                      {formatClockTime(turn.startedAt)}
+                    </time>
+                  )}
                 </button>
               </td>
             </tr>

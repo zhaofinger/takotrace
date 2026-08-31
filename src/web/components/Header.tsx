@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import type { ConnectionState, Thread } from "../types";
 import type { ThemePreference } from "../theme";
 import { nextThemePreference } from "../theme";
@@ -26,12 +27,16 @@ export function Header({
   theme: ThemePreference;
   threads: Thread[];
 }) {
+  const [isConnectionOpen, setIsConnectionOpen] = useState(false);
   const isConnected = connection.status.toLowerCase() === "connected";
   const connectionLabel = isConnected
     ? "Connected"
     : `${connection.status.charAt(0).toUpperCase()}${connection.status.slice(1)}`;
   const nextTheme = nextThemePreference(theme);
   const themeIcon = theme === "auto" ? "monitor" : theme === "light" ? "sun" : "moon";
+  const handleSearchOpenChange = useCallback((isOpen: boolean) => {
+    if (isOpen) setIsConnectionOpen(false);
+  }, []);
 
   return (
     <header className="vbg-custom-topbar">
@@ -40,12 +45,22 @@ export function Header({
         <h1>TakoTrace</h1>
       </div>
       <GlobalSearch
+        onOpenChange={handleSearchOpenChange}
         onSelectThread={onSelectThread}
         onSelectTurn={onSelectTurn}
         threads={threads}
       />
       <div className="vbg-custom-topbar__meta">
-        <details className="vbg-custom-topbar__connection">
+        <details
+          className="vbg-custom-topbar__connection"
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            setIsConnectionOpen(false);
+          }}
+          onToggle={(event) => setIsConnectionOpen(event.currentTarget.open)}
+          open={isConnectionOpen}
+        >
           <summary title="Connection details">
             <StatusMark status={connectionLabel} />
           </summary>

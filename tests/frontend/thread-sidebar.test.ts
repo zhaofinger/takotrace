@@ -58,6 +58,27 @@ describe('ThreadSidebar', () => {
     expect(markup).toMatch(/aria-selected="true"[^>]*><span>Claude<\/span>/);
   });
 
+  it('associates provider tabs with the active session panel', () => {
+    const markup = renderToStaticMarkup(createElement(ThreadSidebar, {
+      activeProvider: 'claude',
+      counts: { codex: 12, claude: 7 },
+      onProviderChange: () => undefined,
+      onSelect: () => undefined,
+      threads: [],
+    }));
+
+    expect(markup).toContain('id="session-provider-tab-codex"');
+    expect(markup).toContain('aria-controls="session-provider-panel-codex"');
+    expect(markup).toContain('id="session-provider-tab-claude"');
+    expect(markup).toContain('aria-controls="session-provider-panel-claude"');
+    expect(markup).toContain('id="session-provider-panel-claude"');
+    expect(markup).toContain('aria-labelledby="session-provider-tab-claude"');
+    expect(markup).toContain('id="session-provider-panel-codex"');
+    expect(markup).toContain('aria-labelledby="session-provider-tab-codex" hidden=""');
+    expect(markup.match(/role="tabpanel"/g)).toHaveLength(2);
+    expect(markup.match(/hidden=""/g)).toHaveLength(1);
+  });
+
   it('sorts threads into local time groups with stable invalid-date fallback', () => {
     const threads: Thread[] = [
       { id: 'older', title: 'Older', cwd: '/workspace/older', status: 'completed', turnsLoaded: true, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', turns: [] },

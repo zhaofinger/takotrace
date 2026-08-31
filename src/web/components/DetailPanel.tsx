@@ -264,19 +264,6 @@ export function DetailPanel({
     <aside className="vbg-custom-detail" aria-label="Run detail">
       <div className="vbg-custom-detail__tabs" role="tablist">
         <button
-          aria-controls="turn-sequence-panel"
-          aria-selected={tab === "sequence"}
-          className={tab === "sequence" ? "vbg-custom-is-active" : ""}
-          id="turn-sequence-tab"
-          onKeyDown={handleRovingTabKey}
-          onClick={() => setTab("sequence")}
-          role="tab"
-          tabIndex={tab === "sequence" ? 0 : -1}
-          type="button"
-        >
-          Sequence
-        </button>
-        <button
           aria-controls="turn-trace-panel"
           aria-selected={tab === "trace"}
           className={tab === "trace" ? "vbg-custom-is-active" : ""}
@@ -288,6 +275,19 @@ export function DetailPanel({
           type="button"
         >
           Trace
+        </button>
+        <button
+          aria-controls="turn-sequence-panel"
+          aria-selected={tab === "sequence"}
+          className={tab === "sequence" ? "vbg-custom-is-active" : ""}
+          id="turn-sequence-tab"
+          onKeyDown={handleRovingTabKey}
+          onClick={() => setTab("sequence")}
+          role="tab"
+          tabIndex={tab === "sequence" ? 0 : -1}
+          type="button"
+        >
+          Sequence
         </button>
         <button
           aria-controls={`turn-${thirdTab}-panel`}
