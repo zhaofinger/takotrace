@@ -31,12 +31,14 @@ describe("sequence semantic colors", () => {
     expect(styles).toContain("--vbg-role-tool-bg: light-dark(oklch(");
   });
 
-  it("uses the selected state alone for keyboard focus", () => {
+  it("keeps keyboard focus visible independently of selection", () => {
     const focusRules = [...styles.matchAll(/\.vbg-report \.vbg-custom-sequence__step-row:focus-visible \{([^}]*)\}/g)]
       .map((match) => match[1] ?? "");
     const selectedFocusRule = styles.match(/\.vbg-report \.vbg-custom-sequence__step-row--selected:focus-visible \{([^}]*)\}/)?.[1] ?? "";
 
-    expect(focusRules).toEqual(["\n  outline: none;\n"]);
+    expect(focusRules).toHaveLength(1);
+    expect(focusRules[0]).toContain("outline: 2px solid var(--vbg-focus)");
+    expect(focusRules[0]).toContain("outline-offset: -2px");
     expect(selectedFocusRule).toBe("");
   });
 });

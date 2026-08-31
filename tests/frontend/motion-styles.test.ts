@@ -49,6 +49,12 @@ describe("motion styles", () => {
     expect(styles).toMatch(/\.vbg-custom-turn-token-popover\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*var\(--vbg-z-tooltip\);/s);
   });
 
+  it("keeps sequence tooltips descriptive rather than interactive", () => {
+    expect(sequenceDiagram).toContain('import { InlineMarkdown } from "./MarkdownContent"');
+    expect(sequenceDiagram).toContain("<InlineMarkdown>{stepTooltip.text}</InlineMarkdown>");
+    expect(sequenceDiagram).not.toContain("<MarkdownContent>{stepTooltip.text}</MarkdownContent>");
+  });
+
   it("keeps run metadata on one line and progressively compacts narrow summaries", () => {
     expect(styles).toMatch(/\.vbg-custom-turn-summary\s*\{[^}]*flex-wrap:\s*nowrap;/s);
     expect(styles).toMatch(/\.vbg-custom-turn-overview\s*\{[^}]*flex-wrap:\s*nowrap;/s);

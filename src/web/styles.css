@@ -85,7 +85,7 @@
 .vbg-custom-topbar {
   display: grid;
   grid-template-columns: auto minmax(240px, 480px) minmax(0, 1fr);
-  align-items: flex-start;
+  align-items: center;
   gap: var(--vbg-space-6);
   min-width: 0;
   padding: 0 var(--vbg-space-4);
@@ -553,10 +553,10 @@
 .vbg-custom-event-fields > div { min-width: 0; }
 .vbg-custom-event-fields dt { color: var(--vbg-text-tertiary); font-size: var(--vbg-type-metadata); font-weight: var(--vbg-weight-regular); }
 .vbg-custom-event-fields dd { max-width: 42ch; margin: 0; overflow: hidden; color: var(--vbg-text-primary); font-family: var(--vbg-font-mono); font-size: var(--vbg-type-compact); font-weight: var(--vbg-weight-medium); line-height: var(--vbg-leading-compact); text-overflow: ellipsis; white-space: nowrap; }
-.vbg-custom-event-actions { display: flex; flex-wrap: wrap; gap: var(--vbg-space-1); margin: var(--vbg-space-1) 0; }
-.vbg-custom-event-actions > span { display: inline-flex; align-items: center; gap: var(--vbg-space-2); min-width: 0; padding: var(--vbg-space-1) var(--vbg-space-2); border: 1px solid var(--vbg-border-subtle); border-radius: var(--vbg-radius-small); color: var(--vbg-text-secondary); font-size: var(--vbg-type-metadata); }
-.vbg-custom-event-actions strong { color: var(--vbg-text-tertiary); font-weight: var(--vbg-weight-regular); }
-.vbg-custom-event-actions code { max-width: 30ch; overflow: hidden; color: var(--vbg-text-primary); font-weight: var(--vbg-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.vbg-custom-event-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vbg-space-1); margin: var(--vbg-space-1) 0; }
+.vbg-custom-event-actions > span { display: flex; align-items: center; gap: var(--vbg-space-2); width: 100%; min-width: 0; padding: var(--vbg-space-1) var(--vbg-space-2); border: 1px solid var(--vbg-border-subtle); border-radius: var(--vbg-radius-small); color: var(--vbg-text-secondary); font-size: var(--vbg-type-metadata); }
+.vbg-custom-event-actions strong { flex: 0 0 auto; color: var(--vbg-text-tertiary); font-weight: var(--vbg-weight-regular); }
+.vbg-custom-event-actions code { flex: 1; min-width: 0; max-width: none; overflow: hidden; color: var(--vbg-text-primary); font-weight: var(--vbg-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
 .vbg-custom-event-disclosure { margin-top: var(--vbg-space-2); color: var(--vbg-text-secondary); font-size: var(--vbg-type-metadata); }
 .vbg-report :is(.vbg-custom-event-disclosure, .vbg-custom-subagent-events details, .vbg-custom-replay-execution) { padding-block: 0; border-top: 0; }
 .vbg-custom-event-disclosure > summary { width: fit-content; max-width: 100%; padding: var(--vbg-space-1) 0; cursor: pointer; white-space: nowrap; }
@@ -738,6 +738,7 @@
 
 .vbg-custom-error-banner { position: fixed; z-index: var(--vbg-z-toast); top: calc(56px + var(--vbg-space-2)); left: 50%; display: flex; align-items: center; justify-content: space-between; gap: var(--vbg-space-4); width: min(520px, calc(100% - var(--vbg-space-8))); padding: var(--vbg-space-3) var(--vbg-space-4); opacity: 1; transform: translate(-50%, 0); border: 1px solid var(--vbg-color-error); border-radius: var(--vbg-radius-small); background: var(--vbg-surface-primary); color: var(--vbg-color-error); font-size: var(--vbg-type-compact); animation: vbg-custom-banner-enter var(--vbg-motion-ui) var(--vbg-ease-out) both; transition: opacity var(--vbg-motion-ui) var(--vbg-ease-out), transform var(--vbg-motion-ui) var(--vbg-ease-out); }
 .vbg-custom-error-banner button { padding: var(--vbg-space-2) var(--vbg-space-3); border: 1px solid var(--vbg-border-default); border-radius: var(--vbg-radius-small); background: var(--vbg-surface-primary); cursor: pointer; transition: background-color var(--vbg-motion-fast) var(--vbg-ease-out), transform var(--vbg-motion-fast) var(--vbg-ease-out); }
+.vbg-custom-error-banner button:hover { background: var(--vbg-surface-secondary); }
 .vbg-custom-error-banner button:active { transform: scale(0.97); }
 
 .vbg-report button:focus-visible, .vbg-report input:focus-visible, .vbg-report select:focus-visible, .vbg-report a:focus-visible, .vbg-report summary:focus-visible, .vbg-report [role="tabpanel"]:focus-visible { outline: 2px solid var(--vbg-focus); outline-offset: 2px; }
@@ -1125,7 +1126,8 @@
 }
 
 .vbg-report .vbg-custom-sequence__step-row:focus-visible {
-  outline: none;
+  outline: 2px solid var(--vbg-focus);
+  outline-offset: -2px;
 }
 
 .vbg-custom-sequence__step-line-container {
@@ -1318,6 +1320,17 @@
 }
 
 .vbg-custom-sequence__tooltip--above { transform: translate(-50%, -100%) scale(1); transform-origin: bottom center; }
+
+.vbg-custom-sequence__tooltip .vbg-custom-inline-markdown {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: pre-wrap;
+}
+
+.vbg-custom-sequence__tooltip .vbg-custom-inline-markdown code {
+  white-space: pre-wrap;
+}
 
 .vbg-custom-sequence__tooltip .vbg-custom-markdown {
   margin: 0;

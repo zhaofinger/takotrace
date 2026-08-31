@@ -29,6 +29,13 @@ describe("metadata label and value hierarchy", () => {
     expect(declarations(selector)).toContain("font-weight: var(--vbg-weight-regular)");
   });
 
+  it("lets command action targets fill the detail width", () => {
+    expect(declarations(".vbg-custom-event-actions")).toContain("display: grid");
+    expect(declarations(".vbg-custom-event-actions > span")).toContain("width: 100%");
+    expect(declarations(".vbg-custom-event-actions code")).toContain("flex: 1");
+    expect(declarations(".vbg-custom-event-actions code")).toContain("max-width: none");
+  });
+
   it.each([
     ".vbg-custom-topbar__connection dd",
     ".vbg-custom-session-tooltip dd",

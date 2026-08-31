@@ -57,13 +57,3 @@ TakoTrace binds to loopback by default, keeps runtime state in memory, and adds 
 
 > [!WARNING]
 > The local API has no general authentication layer. Do not expose it directly to a LAN or the public internet, including with `--host 0.0.0.0`.
-
-## Documentation
-
-- [Technical design](./TECHNICAL_DESIGN.md)
-- [Product principles](./PRODUCT.md)
-- [Development guide](./DEVELOPMENT.md)
-
-<p align="center">
-  <a href="https://github.com/zhaofinger/takotrace"><img src="./assets/star-takotrace.gif" alt="If TakoTrace is useful, star the repository" width="600" /></a>
-</p>

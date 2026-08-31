@@ -1,9 +1,19 @@
 import { createElement } from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Header } from '../../src/web/components/Header.js';
 
+const styles = readFileSync(new URL('../../src/web/styles.css', import.meta.url), 'utf8');
+
 describe('Header', () => {
+  it('centers topbar content vertically', () => {
+    const topbarRule = styles.match(/\.vbg-custom-topbar \{([^}]*)\}/)?.[1] ?? '';
+
+    expect(topbarRule).toContain('align-items: center');
+    expect(topbarRule).not.toContain('align-items: flex-start');
+  });
+
   it('keeps diagnostics behind the connection disclosure', () => {
     const markup = renderToStaticMarkup(createElement(Header, {
       connection: {

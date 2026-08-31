@@ -57,13 +57,3 @@ TakoTrace 默认只绑定 loopback，运行状态保存在内存中，不增加�
 
 > [!WARNING]
 > 本地 API 没有通用认证层。不要将它直接暴露到局域网或公网，包括使用 `--host 0.0.0.0`。
-
-## 文档
-
-- [技术设计](./TECHNICAL_DESIGN.md)
-- [产品原则](./PRODUCT.md)
-- [本地开发](./DEVELOPMENT.md)
-
-<p align="center">
-  <a href="https://github.com/zhaofinger/takotrace"><img src="./assets/star-takotrace.gif" alt="如果 TakoTrace 对你有用，欢迎点亮 Star" width="600" /></a>
-</p>

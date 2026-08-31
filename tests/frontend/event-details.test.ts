@@ -19,6 +19,26 @@ function fileChangeEvent(raw: unknown): TraceEvent {
   };
 }
 
+describe("EventDetails command actions", () => {
+  it("labels unclassified shell actions as commands instead of unknown", () => {
+    const markup = renderToStaticMarkup(createElement(EventDetails, {
+      event: {
+        ...fileChangeEvent({}),
+        type: "CommandExecution",
+        raw: {
+          command: "/opt/homebrew/bin/fnm exec --using=22.22.0 npm test",
+          commandActions: [{ type: "unknown", command: "/opt/homebrew/bin/fnm exec --using=22.22.0 npm test" }],
+          exitCode: 0,
+        },
+      },
+      fallback: "No additional detail",
+    }));
+
+    expect(markup).toContain("<strong>command</strong>");
+    expect(markup).not.toContain("<strong>unknown</strong>");
+  });
+});
+
 describe("EventDetails file changes", () => {
   it("renders current App Server path-keyed changes with their unified diff", () => {
     const markup = renderToStaticMarkup(createElement(EventDetails, {

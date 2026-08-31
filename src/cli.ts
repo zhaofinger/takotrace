@@ -96,6 +96,9 @@ async function main(): Promise<void> {
   }
 
   const url = `http://${formatHost(address.host)}:${address.port}`;
+  if (options.port !== 0 && address.port !== options.port) {
+    process.stdout.write(`Port ${options.port} is unavailable; using ${address.port}.\n`);
+  }
   process.stdout.write(`TakoTrace listening on ${url}\n`);
   if (options.open) openBrowser(url);
 

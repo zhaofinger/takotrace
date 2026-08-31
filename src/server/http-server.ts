@@ -12,6 +12,37 @@ import { resolveSubagentAssignment } from './subagent-assignment.js';
 
 export type RpcActions = TraceProviderActions;
 
+const PORT_FALLBACK_ATTEMPTS = 20;
+
+function candidatePorts(requestedPort: number): number[] {
+  if (requestedPort === 0) return [0];
+  const ports = Array.from(
+    { length: Math.min(PORT_FALLBACK_ATTEMPTS, 65_536 - requestedPort) },
+    (_, index) => requestedPort + index,
+  );
+  return ports.at(-1) === 0 ? ports : [...ports, 0];
+}
+
+function isAddressInUse(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EADDRINUSE';
+}
+
+async function listenOnPort(server: Server, host: string, port: number): Promise<void> {
+  await new Promise<void>((resolveListen, rejectListen) => {
+    const onError = (error: Error) => {
+      server.off('listening', onListening);
+      rejectListen(error);
+    };
+    const onListening = () => {
+      server.off('error', onError);
+      resolveListen();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, host);
+  });
+}
+
 export interface TakoTraceServerOptions {
   host?: string;
   port?: number;
@@ -59,14 +90,18 @@ export class TakoTraceServer {
     this.server = createServer((request, response) => {
       this.route(request, response).catch((error) => sendError(response, 500, error));
     });
-    await new Promise<void>((resolveListen, reject) => {
-      this.server!.once('error', reject);
-      this.server!.listen(this.port, this.host, () => {
-        this.server!.off('error', reject);
-        resolveListen();
-      });
-    });
-    return this.address();
+    let lastError: unknown;
+    for (const port of candidatePorts(this.port)) {
+      try {
+        await listenOnPort(this.server, this.host, port);
+        return this.address();
+      } catch (error) {
+        lastError = error;
+        if (!isAddressInUse(error)) break;
+      }
+    }
+    this.server = undefined;
+    throw lastError;
   }
 
   async close(): Promise<void> {

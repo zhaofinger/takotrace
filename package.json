@@ -10,6 +10,18 @@
   "bugs": {
     "url": "https://github.com/zhaofinger/takotrace/issues"
   },
+  "keywords": [
+    "ai-agent",
+    "agent-tracing",
+    "claude-code",
+    "codex",
+    "developer-tools",
+    "local-first",
+    "mcp",
+    "observability",
+    "session-inspector",
+    "subagent"
+  ],
   "type": "module",
   "bin": {
     "takotrace": "dist/cli.js"

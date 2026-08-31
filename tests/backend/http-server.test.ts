@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { TakoTraceServer, type RpcActions } from '../../src/server/http-server.js';
@@ -10,6 +11,33 @@ describe('TakoTraceServer', () => {
   afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => server.close()));
     await Promise.all(temporaryPaths.splice(0).map((path) => rm(path, { force: true, recursive: true })));
+  });
+
+  it('uses another available port when the requested port is occupied', async () => {
+    const blocker = createHttpServer();
+    await new Promise<void>((resolve, reject) => {
+      blocker.once('error', reject);
+      blocker.listen(0, '127.0.0.1', resolve);
+    });
+    const blockerAddress = blocker.address();
+    if (!blockerAddress || typeof blockerAddress === 'string') throw new Error('Unable to reserve test port');
+
+    try {
+      const actions: RpcActions = {
+        startThread: async () => ({}),
+        resumeThread: async () => ({}),
+        startTurn: async () => ({}),
+      };
+      const server = new TakoTraceServer(actions, { host: '127.0.0.1', port: blockerAddress.port });
+      servers.push(server);
+
+      const address = await server.listen();
+
+      expect(address.port).not.toBe(blockerAddress.port);
+      expect(await json(`http://${address.host}:${address.port}/healthz`)).toEqual({ ok: true });
+    } finally {
+      await new Promise<void>((resolve, reject) => blocker.close((error) => error ? reject(error) : resolve()));
+    }
   });
 
   it('serves health/state and forwards thread actions', async () => {

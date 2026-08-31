@@ -73,4 +73,14 @@ describe("sequence step spacing", () => {
     expect(headerRule).toContain("padding: 0 var(--vbg-sequence-inline-end) 0 var(--vbg-sequence-inline-start)");
     expect(bodyRule).toContain("padding: 0 var(--vbg-sequence-inline-end) 0 var(--vbg-sequence-inline-start)");
   });
+
+  it("shows complete tooltip content across multiple lines", () => {
+    const tooltipTextRule = styles.match(/\.vbg-custom-sequence__tooltip \.vbg-custom-inline-markdown \{([^}]*)\}/)?.[1] ?? "";
+
+    expect(tooltipTextRule).toContain("overflow: visible");
+    expect(tooltipTextRule).toContain("overflow-wrap: anywhere");
+    expect(tooltipTextRule).toContain("text-overflow: clip");
+    expect(tooltipTextRule).toContain("white-space: pre-wrap");
+  });
+
 });

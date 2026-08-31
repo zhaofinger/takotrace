@@ -64,7 +64,8 @@ function CommandDetails({ raw }: { raw: RecordValue }) {
       {actions.length > 0 && (
         <div className="vbg-custom-event-actions" aria-label="Command actions">
           {actions.map((action, index) => {
-            const kind = text(action.type) ?? "command";
+            const rawKind = text(action.type);
+            const kind = !rawKind || rawKind.toLowerCase() === "unknown" ? "command" : rawKind;
             const target = text(action.path) ?? text(action.query) ?? text(action.name) ?? text(action.command);
             return <span key={`${kind}-${index}`}><strong>{kind}</strong>{target && <code>{target}</code>}</span>;
           })}

@@ -17,7 +17,7 @@ import {
 import type { OpenSubagentHandler } from "./EventDetails";
 import type { FlowEvent } from "./InteractionFlow";
 import { Icon } from "./Icon";
-import { MarkdownContent } from "./MarkdownContent";
+import { InlineMarkdown } from "./MarkdownContent";
 import { StatusMark } from "./StatusMark";
 import {
   buildSequenceDiagramModel,
@@ -440,7 +440,7 @@ export function SequenceDiagram({
           role="tooltip"
           style={{ left: stepTooltip.left, maxHeight: stepTooltip.maxHeight, top: stepTooltip.top }}
         >
-          <MarkdownContent>{stepTooltip.text}</MarkdownContent>
+          <InlineMarkdown>{stepTooltip.text}</InlineMarkdown>
         </div>,
         document.body,
       )}
