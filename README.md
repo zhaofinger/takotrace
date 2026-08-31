@@ -17,6 +17,10 @@
 
 TakoTrace turns local AI coding sessions into a browsable execution trace. Follow the user request, agent reasoning, commands, file changes, MCP calls, skills, and subagents without digging through rollout files or terminal logs.
 
+<p align="center">
+  <img src="./assets/takotrace-screenshot.png" alt="TakoTrace sequence diagram view" />
+</p>
+
 ## Quick start
 
 Requires Node.js 22+ and Codex, Claude Code, or both.

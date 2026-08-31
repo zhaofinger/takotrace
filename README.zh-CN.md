@@ -17,6 +17,10 @@
 
 TakoTrace 把本地 AI 编程会话整理成可浏览的执行轨迹。用户请求、Agent 推理、命令、文件修改、MCP 调用、Skill 和 Subagent 都集中在一个界面，不必再翻 rollout 文件或终端日志。
 
+<p align="center">
+  <img src="./assets/takotrace-screenshot.png" alt="TakoTrace 时序图界面" />
+</p>
+
 ## 快速开始
 
 需要 Node.js 22+，并安装 Codex、Claude Code，或同时安装两者。
