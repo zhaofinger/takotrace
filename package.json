@@ -2,6 +2,14 @@
   "name": "takotrace",
   "version": "0.0.1",
   "description": "Local-first session inspector and execution tracer for Codex and Claude agents",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhaofinger/takotrace"
+  },
+  "homepage": "https://github.com/zhaofinger/takotrace#readme",
+  "bugs": {
+    "url": "https://github.com/zhaofinger/takotrace/issues"
+  },
   "type": "module",
   "bin": {
     "takotrace": "dist/cli.js"
