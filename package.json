@@ -1,6 +1,6 @@
 {
   "name": "takotrace",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Local-first session inspector and execution tracer for Codex and Claude agents",
   "type": "module",
   "bin": {
