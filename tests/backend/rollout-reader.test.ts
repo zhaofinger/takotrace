@@ -13,6 +13,26 @@ afterEach(async () => {
 });
 
 describe('rollout reader', () => {
+  it('only keeps the latest unclosed turn running', async () => {
+    const codexHome = await temporaryCodexHome();
+    const directory = join(codexHome, 'sessions', '2026', '08', '25');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${THREAD_ID}.jsonl`), [
+      entry('session_meta', { id: THREAD_ID }),
+      entry('event_msg', { type: 'task_started', turn_id: 'old-unclosed' }),
+      entry('event_msg', { type: 'item_completed', turn_id: 'old-unclosed', item: { id: 'old-user', type: 'UserMessage' } }),
+      entry('event_msg', { type: 'task_started', turn_id: 'latest-unclosed' }),
+      entry('event_msg', { type: 'item_completed', turn_id: 'latest-unclosed', item: { id: 'latest-user', type: 'UserMessage' } }),
+    ].join('\n'));
+
+    const result = await readRolloutThread(THREAD_ID, { codexHome });
+    const turns = result?.thread.turns as Array<Record<string, unknown>>;
+
+    expect(turns[0]).toMatchObject({ id: 'old-unclosed', status: 'interrupted' });
+    expect(turns[1]).toMatchObject({ id: 'latest-unclosed', status: 'inProgress' });
+    expect(result?.thread.status).toEqual({ type: 'active' });
+  });
+
   it('recovers turns from sessions while merging duplicate contexts and skipping invalid lines', async () => {
     const codexHome = await temporaryCodexHome();
     const directory = join(codexHome, 'sessions', '2026', '08', '25');

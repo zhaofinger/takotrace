@@ -1,74 +1,69 @@
 <p align="center">
-  <img src="./assets/takotrace-logo.png" alt="TakoTrace logo" width="128" />
+  <img src="./assets/takotrace-logo.png" alt="TakoTrace logo" width="160" />
 </p>
 
 <h1 align="center">TakoTrace</h1>
 
-<p align="center">A local-first session inspector and execution tracer for AI coding agents.</p>
+<p align="center">Inspect Codex and Claude Code sessions as timelines, sequence diagrams, and raw events.</p>
+
+<p align="center">
+  <a href="https://github.com/zhaofinger/takotrace/stargazers"><img src="https://img.shields.io/github/stars/zhaofinger/takotrace?style=flat&logo=github" alt="GitHub stars" /></a>
+  <img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22+" />
+  <img src="https://img.shields.io/badge/providers-Codex%20%2B%20Claude-2563eb" alt="Codex and Claude support" />
+  <img src="https://img.shields.io/badge/storage-local--first-0f766e" alt="Local-first storage" />
+</p>
 
 <p align="center"><a href="./README.zh-CN.md">中文</a></p>
 
-TakoTrace turns Codex and Claude Code sessions into browsable timelines of messages, reasoning, tool calls, commands, file changes, MCP activity, skills, and subagents.
-
-It reads local session history, streams precise events from runs managed by the current process, and keeps Codex and Claude sessions isolated in dedicated views.
-
-## Highlights
-
-- Browse sessions by provider and working directory.
-- Inspect each run as a Trace, Sequence diagram, or Raw JSON.
-- Follow commands, file changes, MCP calls, skills, and subagent relationships.
-- View token usage, Markdown, attachments, images, and local source files.
-- Recover readable Codex history from local rollout files when App Server decoding fails.
-
-The UI uses the agent-oriented terms **Session**, **Run**, and **Step**. Raw APIs retain the original Codex field names.
+TakoTrace turns local AI coding sessions into a browsable execution trace. Follow the user request, agent reasoning, commands, file changes, MCP calls, skills, and subagents without digging through rollout files or terminal logs.
 
 ## Quick start
 
-Requires Node.js 22+ and at least one supported runtime:
-
-- **Codex:** TakoTrace automatically compares the `codex` in `PATH` with macOS ChatGPT/Codex app bundles and uses the newest available version. Pass `--codex-path` to override the selection; if detection fails, TakoTrace keeps using `codex` from `PATH`.
-- **Claude:** Claude Code must be discoverable, or passed with `--claude-path`.
+Requires Node.js 22+ and Codex, Claude Code, or both.
 
 ```bash
 npx takotrace
 ```
 
-TakoTrace listens on `127.0.0.1:4317`, starts both providers by default, and opens the browser. If one provider is unavailable, the other can continue running.
+TakoTrace listens on `127.0.0.1:4317`, starts the available providers, and opens the browser.
 
 ```bash
-# Start one provider only
+# Start one provider
 npx takotrace --provider codex
 npx takotrace --provider claude
 
-# Override automatic Codex selection
+# Select a Codex binary
 npx takotrace --codex-path /path/to/codex
 
-# Use a custom port without opening the browser
+# Change the port and keep the browser closed
 npx takotrace --port 4400 --no-open
 ```
 
-Run `npx takotrace --help` for all options, including `--host`, `--port`, `--provider`, `--codex-path`, and `--claude-path`.
+Run `npx takotrace --help` for every CLI option.
+
+## What you can inspect
+
+- Sessions grouped by provider and working directory.
+- Each run as a Trace, Sequence diagram, or Raw JSON.
+- Commands, file changes, MCP calls, skills, and subagent relationships.
+- Token usage, Markdown, attachments, images, and local source files.
+- Codex history recovered read-only from local rollout files when App Server decoding fails.
+
+TakoTrace uses **Session**, **Run**, and **Step** in the UI. Raw APIs keep the original provider field names.
 
 ## Data and security
 
-- TakoTrace binds to loopback by default and keeps runtime state in memory.
-- It adds no remote session storage or telemetry. Managed runs still use the configured Codex or Claude provider.
-- Codex rollout fallback and Claude history access are read-only.
-- Managed sessions provide precise live events; externally started sessions are periodically synchronized and may be slightly delayed.
-- Claude authentication is delegated to Claude Code / Agent SDK. TakoTrace does not implement login, handle credentials, or enable permission bypass.
+TakoTrace binds to loopback by default, keeps runtime state in memory, and adds no telemetry or remote session storage. Codex rollout fallback and Claude history access are read-only. Provider authentication stays with Codex or Claude Code.
 
 > [!WARNING]
-> The local API has no general authentication layer. Do not expose the service directly to a LAN or the public internet, including with `--host 0.0.0.0`.
+> The local API has no general authentication layer. Do not expose it directly to a LAN or the public internet, including with `--host 0.0.0.0`.
 
-## Development
+## Documentation
 
-```bash
-npm install
-npm run dev
-```
+- [Technical design](./TECHNICAL_DESIGN.md)
+- [Product principles](./PRODUCT.md)
+- [Development guide](./DEVELOPMENT.md)
 
-```bash
-npm test
-npm run typecheck
-npm run build
-```
+<p align="center">
+  <a href="https://github.com/zhaofinger/takotrace"><img src="./assets/star-takotrace.gif" alt="If TakoTrace is useful, star the repository" width="600" /></a>
+</p>

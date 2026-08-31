@@ -55,6 +55,7 @@ export interface ReplayExecutionTiming {
 }
 
 function eventTiming(event: FlowEvent): Pick<ReplayAction, "startedAtMs" | "completedAtMs" | "timing"> {
+  if (event.timingSource === "turn-fallback") return { timing: "order" };
   const startedAtMs = timestampMs(event.startedAt);
   const completedAtMs = timestampMs(event.completedAt);
   if (startedAtMs !== undefined && completedAtMs !== undefined && completedAtMs >= startedAtMs) {

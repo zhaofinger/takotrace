@@ -107,7 +107,7 @@ describe('turnSummary', () => {
     expect(markup).toContain('aria-label="Copy session ID"');
     expect(markup).toContain('aria-label="Session details for thread-full-id"');
     expect(markup).toContain('class="vbg-custom-session-summary"');
-    expect(markup).toContain('<code class="vbg-custom-compact-id" title="thread-full-id">thread-f…</code>');
+    expect(markup).toContain('<code class="vbg-custom-compact-id" title="thread-full-id">thread-full-id</code>');
     expect(markup).toContain('0 runs');
     expect(markup).toContain('class="vbg-custom-id-copy"');
     expect(markup.indexOf('vbg-custom-session-summary__runs')).toBeLessThan(markup.indexOf('vbg-custom-compact-id'));
@@ -117,10 +117,10 @@ describe('turnSummary', () => {
     expect(markup).not.toContain('vbg-custom-thread-code');
     expect(markup).toContain('<main aria-label="Runs"');
     expect(markup).not.toContain('<h2>Runs</h2>');
-    expect(markup).toContain('Rollout fallback');
+    expect(markup).not.toContain('vbg-custom-timeline__footer');
   });
 
-  it('labels Claude session history sources', () => {
+  it('does not repeat the loaded session history source below the run list', () => {
     const thread: Thread = {
       id: 'claude-session',
       title: 'Claude session',
@@ -138,7 +138,8 @@ describe('turnSummary', () => {
       turns: [],
     }));
 
-    expect(markup).toContain('Claude sessions');
+    expect(markup).not.toContain('Claude sessions');
+    expect(markup).not.toContain('vbg-custom-timeline__footer');
   });
 
   it('uses the singular run label for one run', () => {

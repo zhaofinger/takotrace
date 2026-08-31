@@ -11,16 +11,22 @@ describe("sequence step spacing", () => {
     const lineContainerRule = styles.match(/\.vbg-custom-sequence__step-line-container \{([^}]*)\}/)?.[1] ?? "";
     const selfLoopRule = styles.match(/\.vbg-custom-sequence__self-loop \{([^}]*)\}/)?.[1] ?? "";
     const selfPathRule = styles.match(/\.vbg-custom-sequence__self-path \{([^}]*)\}/)?.[1] ?? "";
+    const arrowLabelRule = styles.match(/\.vbg-custom-sequence__arrow-label \{([^}]*)\}/)?.[1] ?? "";
+    const selfBadgeRule = styles.match(/\.vbg-custom-sequence__self-badge \{([^}]*)\}/)?.[1] ?? "";
 
     expect(stepRowRule).toContain("min-height: 56px");
     expect(stepRowRule).toContain("contain-intrinsic-size: auto 56px");
     expect(parallelStartRule).toContain("min-height: 80px");
-    expect(arrowRule).toContain("--vbg-sequence-arrow-y: 40px");
+    expect(arrowRule).toContain("--vbg-sequence-arrow-y: 36px");
     expect(arrowRule).toContain("height: 44px");
     expect(lineContainerRule).toContain("height: 44px");
     expect(selfLoopRule).toContain("height: 44px");
     expect(selfPathRule).toContain("top: 28px");
     expect(selfPathRule).toContain("height: 16px");
+    expect(arrowLabelRule).toContain("width: max-content");
+    expect(arrowLabelRule).toContain("max-width: min(360px, calc(100vw - 96px))");
+    expect(selfBadgeRule).toContain("width: max-content");
+    expect(selfBadgeRule).toContain("max-width: min(320px, calc(100vw - 96px))");
   });
 
   it("keeps the shared inspector overlaying the replay canvas", () => {
@@ -37,12 +43,20 @@ describe("sequence step spacing", () => {
   });
 
   it("keeps the inspector title compact on one line", () => {
+    const titleContainerRule = styles.match(/\.vbg-custom-sequence__inspector-title \{([^}]*)\}/)?.[1] ?? "";
     const titleRule = styles.match(/\.vbg-custom-sequence__inspector-title strong \{([^}]*)\}/)?.[1] ?? "";
 
+    const stepRule = styles.match(/\.vbg-custom-sequence__inspector-step \{([^}]*)\}/)?.[1] ?? "";
+
+    expect(titleContainerRule).toContain("align-items: center");
+    expect(titleContainerRule).not.toContain("flex-direction: column");
     expect(titleRule).toContain("overflow: hidden");
+    expect(titleRule).toContain("font-weight: var(--vbg-weight-medium)");
     expect(titleRule).toContain("text-overflow: ellipsis");
     expect(titleRule).toContain("white-space: nowrap");
     expect(titleRule).not.toContain("line-clamp");
+    expect(stepRule).toContain("font-size: var(--vbg-type-step-number)");
+    expect(stepRule).toContain("white-space: nowrap");
   });
 
   it("anchors the copy action to the canvas viewport", () => {

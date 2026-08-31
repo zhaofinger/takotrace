@@ -9,7 +9,8 @@ describe("ExecutionMetaSummary", () => {
       duration: "0ms",
       from: "user",
       startedAt: "2026-08-27T11:12:13.251Z",
-      startedAtLabel: "19:12:13.251",
+      startedAtLabel: "19:12:13",
+      startedAtTitle: "2026-08-27 19:12:13.251",
       to: "agent",
       type: "call",
     }));
@@ -19,7 +20,7 @@ describe("ExecutionMetaSummary", () => {
     expect(markup).toContain("<code title=\"user\">user</code>");
     expect(markup).toContain("<code title=\"agent\">agent</code>");
     expect(markup).toContain('class="vbg-custom-execution-meta__type">call</span>');
-    expect(markup).toContain('<time dateTime="2026-08-27T11:12:13.251Z">19:12:13.251</time>');
+    expect(markup).toContain('<time dateTime="2026-08-27T11:12:13.251Z" title="2026-08-27 19:12:13.251">19:12:13</time>');
     expect(markup.indexOf("Started")).toBeLessThan(markup.indexOf("Direction"));
     expect(markup).toContain("<dt>Duration</dt><dd>0ms</dd>");
     expect(markup).toContain("<dt>Type</dt>");

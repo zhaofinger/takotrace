@@ -8,6 +8,7 @@ import { asRecord, nonEmptyText } from "../value-utils";
 import { CopyIconButton } from "./CopyIconButton";
 import { Icon } from "./Icon";
 import { InlineMarkdown } from "./MarkdownContent";
+import { LoadingState } from "./LoadingState";
 import { StatusMark } from "./StatusMark";
 
 type DisplayTraceEvent = CompactTraceEvent & { raw?: unknown };
@@ -76,8 +77,6 @@ export function Timeline({
     : contextRatio !== undefined && contextRatio >= 0.8
       ? "warning"
       : "normal";
-  const compactSessionId = thread?.id.length && thread.id.length > 9 ? `${thread.id.slice(0, 8)}…` : thread?.id;
-
   const cancelTooltipClose = () => {
     if (tooltipCloseTimerRef.current === undefined) return;
     window.clearTimeout(tooltipCloseTimerRef.current);
@@ -163,7 +162,7 @@ export function Timeline({
                   {contextPercentage}
                 </span>
               )}
-              <code className="vbg-custom-compact-id" title={thread.id}>{compactSessionId}</code>
+              <code className="vbg-custom-compact-id" title={thread.id}>{thread.id}</code>
             </button>
             <CopyIconButton copiedLabel="Session ID copied" copyLabel="Copy session ID" value={thread.id} />
           </div>
@@ -250,11 +249,10 @@ export function Timeline({
           {!rows.length && isLoading && (
             <tr>
               <td>
-                <div aria-live="polite" className="vbg-custom-loading-state" role="status">
-                  <span aria-hidden="true" className="vbg-custom-spinner" />
-                  <strong>Loading runs…</strong>
-                  <span>Fetching this session’s history.</span>
-                </div>
+                <LoadingState
+                  description="Fetching this session’s history."
+                  label="Loading runs…"
+                />
               </td>
             </tr>
           )}
@@ -271,19 +269,11 @@ export function Timeline({
           )}
         </tbody>
       </table>
-      <footer className="vbg-custom-timeline__footer">
-        {isLoading
-          ? "Loading session history…"
-          : thread
-            ? `Showing ${turns.length} run${turns.length === 1 ? "" : "s"} · ${
-              thread.historySource === "rollout-file"
-                ? "Rollout fallback"
-                : thread.historySource === "claude"
-                  ? "Claude sessions"
-                  : "App Server"
-            }`
-            : "Select a session to view runs"}
-      </footer>
+      {(isLoading || !thread) && (
+        <footer className="vbg-custom-timeline__footer">
+          {isLoading ? "Loading session history…" : "Select a session to view runs"}
+        </footer>
+      )}
     </main>
   );
 }

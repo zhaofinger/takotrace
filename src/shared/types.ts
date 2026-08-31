@@ -35,6 +35,7 @@ export interface TraceEvent {
   parentItemId?: string;
   summary: string;
   durationMs?: number;
+  timingSource?: 'observed' | 'turn-fallback';
   model?: string;
   tokenUsage?: ThreadTokenUsage;
   provider?: ProviderId;

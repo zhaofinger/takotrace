@@ -48,6 +48,7 @@ describe("ExecutionReplay waterfall", () => {
     expect(new Set(overviewWidths).size).toBeGreaterThan(1);
     expect(markup).toContain("Tool · Shell · npm test · 3.0s");
     expect(markup).not.toContain("<span>Input</span>");
+    expect(markup).not.toContain("<span>MCP</span>");
   });
 
   it("renders lifecycle overlap as confirmed parallel execution without timestamps", () => {
@@ -79,7 +80,25 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).toContain('title="Bar width represents relative duration"');
   });
 
-  it("keeps Skill and MCP inside Tools while preserving Subagents as a separate overview lane", () => {
+  it("does not infer a false waterfall or overlap from turn fallback timestamps", () => {
+    const sharedAt = "2026-01-01T00:21:06.000Z";
+    const items = [
+      { ...event(1, "userMessage"), at: sharedAt, timingSource: "turn-fallback" as const },
+      { ...event(2, "agentMessage"), at: sharedAt, timingSource: "turn-fallback" as const },
+      { ...event(3, "commandExecution", { command: "npm test" }), at: sharedAt, durationMs: 4_602, timingSource: "turn-fallback" as const },
+      { ...event(4, "mcpToolCall", { tool: "browser" }), at: sharedAt, durationMs: 414, timingSource: "turn-fallback" as const },
+    ];
+    const markup = renderToStaticMarkup(createElement(ExecutionReplay, { items }));
+
+    expect(markup).toContain('class="vbg-custom-replay-overview__sequence"');
+    expect(markup).toContain('title="Bar width represents relative duration"');
+    expect(markup).toContain('title="Exact event time is unavailable">Order only</span>');
+    expect(markup).not.toContain("Possible overlap");
+    expect(markup).not.toContain("Estimated timing");
+    expect(markup).not.toContain(">00:21:06</time>");
+  });
+
+  it("keeps Skill inside Tools while showing MCP and Subagents in separate overview lanes", () => {
     const markup = renderToStaticMarkup(createElement(ExecutionReplay, {
       items: [
         event(1, "skillCall", { name: "impeccable" }),
@@ -91,7 +110,7 @@ describe("ExecutionReplay waterfall", () => {
     expect(markup).toContain("<span>Tools</span>");
     expect(markup).toContain("<span>Subagents</span>");
     expect(markup).not.toContain("<span>Skills</span>");
-    expect(markup).not.toContain("<span>MCP</span>");
+    expect(markup).toContain("<span>MCP</span>");
   });
 
   it("preserves actual timing when timestamps overlap execution order", () => {
@@ -259,7 +278,7 @@ describe("ExecutionReplay waterfall", () => {
       onClose: () => undefined,
     }));
 
-    expect(markup).toContain('<time dateTime="2026-08-29T00:04:01.954">2026-08-29 00:04:01.954</time>');
+    expect(markup).toContain('<time dateTime="2026-08-29T00:04:01.954" title="2026-08-29 00:04:01.954">00:04:01</time>');
     expect(markup).not.toContain('<time dateTime="2026-08-29T00:04:05.000">');
   });
 

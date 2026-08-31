@@ -134,6 +134,10 @@ export async function readRolloutThread(
     const turn = getOrCreateTurn(turns, turnId);
     turn.model = stringField(payload.model) ?? turn.model ?? currentModel;
     if (eventType === 'task_started') {
+      if (activeTurnId && activeTurnId !== turnId) {
+        const previousTurn = getOrCreateTurn(turns, activeTurnId);
+        if (previousTurn.status === 'inProgress') previousTurn.status = 'interrupted';
+      }
       activeTurnId = turnId;
       mostRecentTurnId = turnId;
       turn.status = 'inProgress';

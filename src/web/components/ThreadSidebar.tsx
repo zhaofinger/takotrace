@@ -3,6 +3,7 @@ import { projectName } from "../formatters";
 import { handleRovingTabKey } from "../roving-tabs";
 import type { SessionProvider, Thread } from "../types";
 import { Icon } from "./Icon";
+import { LoadingState } from "./LoadingState";
 
 const COLLAPSED_THREAD_COUNT = 5;
 const COLLAPSED_TIME_THREAD_COUNT = 20;
@@ -161,12 +162,9 @@ export function ThreadSidebar({
         </div>
       )}
       {threads.length === 0 && (
-        <div aria-live={isLoading ? "polite" : undefined} className="vbg-custom-thread-mobile-state" role={isLoading ? "status" : undefined}>
+        <div className="vbg-custom-thread-mobile-state">
           {isLoading ? (
-            <>
-              <span aria-hidden="true" className="vbg-custom-spinner" />
-              <strong>Loading sessions…</strong>
-            </>
+            <LoadingState className="vbg-custom-thread-mobile-state__loading" label="Loading sessions…" />
           ) : (
             <>
               <Icon name="activity" />
@@ -268,11 +266,10 @@ export function ThreadSidebar({
           </button>
         )}
         {threads.length === 0 && isLoading && (
-          <div aria-live="polite" className="vbg-custom-loading-state" role="status">
-            <span aria-hidden="true" className="vbg-custom-spinner" />
-            <strong>Loading sessions…</strong>
-            <span>Reading local session history.</span>
-          </div>
+          <LoadingState
+            description="Reading local session history."
+            label="Loading sessions…"
+          />
         )}
         {threads.length === 0 && !isLoading && (
           <div className="vbg-custom-empty-state">

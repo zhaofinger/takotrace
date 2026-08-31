@@ -168,6 +168,41 @@ function compactSkillTitle(title: string): string {
     .replace(/ \(inferred\)$/, "");
 }
 
+export function compactSequenceSummary(content: string, fallback: string): string {
+  const line = content
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .find((value) => value && !/^```/.test(value));
+  if (!line || line === "No additional detail") return fallback;
+
+  const plain = line
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^>\s*/, "")
+    .replace(/^[-+*]\s+/, "")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/[*_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain || fallback;
+}
+
+function contentSummary(node: FlowNode): string | undefined {
+  if (node.kind !== "user" && node.kind !== "agent" && node.kind !== "reasoning") return undefined;
+  return compactSequenceSummary(node.detail, node.title);
+}
+
+function stepTypeIcon(node: FlowNode, isCommand: boolean, nodeReplIcon?: IconName): IconName {
+  if (isCommand) return "terminal";
+  if (node.kind === "agent") return "message";
+  if (node.kind === "reasoning") return "activity";
+  return nodeReplIcon ?? flowKindIconName(node.kind);
+}
+
 function stepDisplay(
   node: FlowNode,
   event: FlowEvent,
@@ -185,10 +220,13 @@ function stepDisplay(
   const cwd = node.meta?.split(" · ", 1)[0];
   const compactCommand = isCommand ? compactShellCommand(node.detail, cwd) : undefined;
   const detailCommand = isCommand ? normalizeShellCommand(node.detail) : undefined;
+  const summary = contentSummary(node);
   return {
-    displayIcon: isCommand ? "terminal" : isSkill ? "skill" : nodeReplIcon,
-    displayTitle: compactCommand ?? (isSkill ? compactSkillTitle(node.title) : nodeRepl?.title ?? node.title),
-    detailTitle: detailCommand ? `Shell · ${detailCommand}` : node.title,
+    displayIcon: stepTypeIcon(node, isCommand, nodeReplIcon),
+    displayTitle: compactCommand ?? summary ?? (isSkill ? compactSkillTitle(node.title) : nodeRepl?.title ?? node.title),
+    detailTitle: detailCommand
+      ? `Shell · ${detailCommand}`
+      : summary && summary !== node.title ? `${node.title} · ${summary}` : node.title,
     exportTitle: compactCommand ? `Shell · ${compactCommand}` : node.title,
     isCommand,
   };

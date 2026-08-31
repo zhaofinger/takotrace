@@ -89,7 +89,61 @@ describe("trace lifecycle timing", () => {
       at: "2026-01-01T00:00:02.000Z",
       startedAt: "2026-01-01T00:00:01.000Z",
       completedAt: "2026-01-01T00:00:02.000Z",
+      timingSource: "observed",
     });
+  });
+
+  it("marks turn-level fallback timestamps as unavailable item timing", () => {
+    const thread = threadToHistory({
+      id: "thread-1",
+      status: { type: "completed" },
+      createdAt: 1_767_225_600,
+      updatedAt: 1_767_225_603,
+      turns: [{
+        id: "turn-1",
+        status: "completed",
+        startedAt: 1_767_225_600,
+        completedAt: 1_767_225_603,
+        items: [{ id: "item-1", type: "agentMessage", status: "completed", text: "Done" }],
+      }],
+    });
+
+    expect(thread?.turns[0].items[0]).toMatchObject({
+      at: "2026-01-01T00:00:03.000Z",
+      timingSource: "turn-fallback",
+    });
+  });
+
+  it("does not copy a running or interrupted turn status onto committed history items", () => {
+    const thread = threadToHistory({
+      id: "thread-1",
+      status: { type: "active" },
+      createdAt: 1_767_225_600,
+      updatedAt: 1_767_225_603,
+      turns: [{
+        id: "turn-1",
+        status: "interrupted",
+        startedAt: 1_767_225_600,
+        items: [
+          { id: "user-1", type: "userMessage", content: [{ type: "text", text: "Inspect this" }] },
+          { id: "reasoning-1", type: "reasoning", summary: ["Checking"] },
+          { id: "subagent-1", type: "subAgentActivity", kind: "started" },
+          { id: "tool-running", type: "commandExecution", status: "inProgress" },
+          { id: "tool-failed", type: "commandExecution", status: "failed" },
+          { id: "tool-interrupted", type: "commandExecution", status: "interrupted" },
+        ],
+      }],
+    });
+
+    expect(thread?.turns[0].status).toBe("interrupted");
+    expect(thread?.turns[0].items.map((item) => [item.itemId, item.status, item.method])).toEqual([
+      ["user-1", "completed", "item/completed"],
+      ["reasoning-1", "completed", "item/completed"],
+      ["subagent-1", "completed", "item/completed"],
+      ["tool-running", "running", "item/started"],
+      ["tool-failed", "failed", "item/completed"],
+      ["tool-interrupted", "interrupted", "item/completed"],
+    ]);
   });
 
   it("reads a run model from live turn notifications", () => {

@@ -12,9 +12,9 @@ import { handleRovingTabKey } from "../roving-tabs";
 import type { CompactTurn, ThreadDetail, TokenUsageBreakdown, Turn } from "../types";
 import { CopyIconButton } from "./CopyIconButton";
 import { EventDetails, type SubagentDetailView } from "./EventDetails";
-import ExecutionReplay from "./ExecutionReplay";
 import { HighlightedCode } from "./HighlightedCode";
 import { Icon } from "./Icon";
+import { LoadingState } from "./LoadingState";
 import { StatusMark } from "./StatusMark";
 import { SubagentEventList } from "./SubagentThreadDetails";
 
@@ -37,7 +37,7 @@ interface TokenPopoverState {
   top: number;
 }
 
-type DetailTab = "trace" | "sequence" | "json" | "events";
+type DetailTab = "sequence" | "json" | "events";
 
 interface SubagentFrame {
   returnTab: DetailTab;
@@ -46,10 +46,10 @@ interface SubagentFrame {
   turnId: string;
 }
 
-export function subagentNavigation(sourceView: SubagentDetailView, sourceEventId: string) {
+export function subagentNavigation(_sourceView: SubagentDetailView, sourceEventId: string) {
   return {
-    sourceSelectionId: sourceView === "sequence" ? `seq-${sourceEventId}` : sourceEventId,
-    tab: sourceView,
+    sourceSelectionId: `seq-${sourceEventId}`,
+    tab: "sequence",
   } as const;
 }
 
@@ -203,7 +203,7 @@ export function DetailPanel({
   isLoading?: boolean;
   turn?: CompactTurn | Turn;
 }) {
-  const [tab, setTab] = useState<DetailTab>("trace");
+  const [tab, setTab] = useState<DetailTab>("sequence");
   const [subagentStack, setSubagentStack] = useState<SubagentFrame[]>([]);
   const [restoredSelectionId, setRestoredSelectionId] = useState<string>();
   const subagentFrame = subagentStack.at(-1);
@@ -212,17 +212,21 @@ export function DetailPanel({
   const displayTurn = subagentFrame ? scopedTurn : turn;
   const thirdTab = subagentFrame ? "events" : "json";
   const raw = useMemo(() => displayTurn ? JSON.stringify(displayTurn, null, 2) : "", [displayTurn]);
-  const panelId = tab === "trace" ? "turn-trace-panel"
-    : tab === "sequence" ? "turn-sequence-panel"
+  const panelId = tab === "sequence" ? "turn-sequence-panel"
       : tab === "events" ? "turn-events-panel" : "turn-json-panel";
-  const panelLabelId = tab === "trace" ? "turn-trace-tab"
-    : tab === "sequence" ? "turn-sequence-tab"
+  const panelLabelId = tab === "sequence" ? "turn-sequence-tab"
       : tab === "events" ? "turn-events-tab" : "turn-json-tab";
+  const awaitingRunDetail = Boolean(
+    isLoading && !subagentFrame && displayTurn && displayTurn.items.length === 0,
+  );
+  const runDetailUnavailable = Boolean(
+    error && !subagentFrame && displayTurn && displayTurn.items.length === 0,
+  );
 
   useEffect(() => {
     setSubagentStack([]);
     setRestoredSelectionId(undefined);
-    setTab((current) => current === "events" ? "trace" : current);
+    setTab((current) => current === "events" ? "sequence" : current);
   }, [turn?.id]);
 
   useEffect(() => {
@@ -264,19 +268,6 @@ export function DetailPanel({
     <aside className="vbg-custom-detail" aria-label="Run detail">
       <div className="vbg-custom-detail__tabs" role="tablist">
         <button
-          aria-controls="turn-trace-panel"
-          aria-selected={tab === "trace"}
-          className={tab === "trace" ? "vbg-custom-is-active" : ""}
-          id="turn-trace-tab"
-          onKeyDown={handleRovingTabKey}
-          onClick={() => setTab("trace")}
-          role="tab"
-          tabIndex={tab === "trace" ? 0 : -1}
-          type="button"
-        >
-          Trace
-        </button>
-        <button
           aria-controls="turn-sequence-panel"
           aria-selected={tab === "sequence"}
           className={tab === "sequence" ? "vbg-custom-is-active" : ""}
@@ -287,7 +278,7 @@ export function DetailPanel({
           tabIndex={tab === "sequence" ? 0 : -1}
           type="button"
         >
-          Sequence
+          Trace
         </button>
         <button
           aria-controls={`turn-${thirdTab}-panel`}
@@ -314,15 +305,11 @@ export function DetailPanel({
         {error && (
           <p aria-live="polite" className="vbg-custom-detail-state vbg-custom-detail-state--error">{error}</p>
         )}
-        {isLoading && turn && (
-          <span aria-live="polite" className="vbg-custom-sr-only" role="status">Loading full run detail…</span>
-        )}
         {!turn ? isLoading ? (
-          <div aria-live="polite" className="vbg-custom-loading-state" role="status">
-            <span aria-hidden="true" className="vbg-custom-spinner" />
-            <strong>Loading session…</strong>
-            <span>Runs and execution details will appear here.</span>
-          </div>
+          <LoadingState
+            description="Runs and execution details will appear here."
+            label="Loading session…"
+          />
         ) : (
           <div className="vbg-custom-detail-empty"><strong>No run selected</strong><span>Select a run to inspect all of its steps.</span></div>
         ) : !displayTurn ? (
@@ -347,7 +334,12 @@ export function DetailPanel({
                 turnId={displayTurn.id}
               />
             )}
-            {tab === "json" ? (
+            {runDetailUnavailable ? null : tab === "json" && awaitingRunDetail ? (
+              <LoadingState
+                description="Fetching this run’s execution events."
+                label="Loading run details…"
+              />
+            ) : tab === "json" ? (
               <HighlightedCode
                 className="vbg-custom-raw-json"
                 code={raw}
@@ -378,31 +370,31 @@ export function DetailPanel({
                   )}
                 </div>
               </div>
-              {tab === "trace" ? (
-                <ExecutionReplay
-                  initialSelectedId={restoredSelectionId}
-                  items={displayTurn.items}
-                  key={`${subagentFrame?.thread.id ?? "parent"}-${displayTurn.id}`}
-                  onOpenSubagent={openSubagent}
-                />
-              ) : tab === "sequence" ? (
-                <Suspense fallback={<div aria-live="polite" className="vbg-custom-loading-state" role="status">Loading sequence…</div>}>
-                  <SequenceDiagram
-                    initialSelectedStepId={restoredSelectionId}
-                    items={displayTurn.items}
-                    key={`${subagentFrame?.thread.id ?? "parent"}-${displayTurn.id}`}
-                    onOpenSubagent={openSubagent}
-                    scope={subagentFrame ? "subagent" : "main"}
-                    threadContext={subagentFrame?.thread}
+              {tab === "sequence" ? (
+                awaitingRunDetail ? (
+                  <LoadingState
+                    description="Fetching this run’s execution events."
+                    label="Loading run details…"
                   />
-                </Suspense>
+                ) : (
+                  <Suspense fallback={<LoadingState label="Loading trace…" />}>
+                    <SequenceDiagram
+                      initialSelectedStepId={restoredSelectionId}
+                      items={displayTurn.items}
+                      key={`${subagentFrame?.thread.id ?? "parent"}-${displayTurn.id}`}
+                      onOpenSubagent={openSubagent}
+                      scope={subagentFrame ? "subagent" : "main"}
+                      threadContext={subagentFrame?.thread}
+                    />
+                  </Suspense>
+                )
               ) : (
                 <div className="vbg-custom-subagent-events-view">
                   {scopedTurn && (
                     <SubagentEventList
                       items={scopedTurn.items}
                       renderEventDetails={(event) => (
-                        <EventDetails event={event} fallback={event.summary} onOpenSubagent={openSubagent} />
+                        <EventDetails event={event} fallback={event.summary} onOpenSubagent={openSubagent} subagentView="sequence" />
                       )}
                     />
                   )}

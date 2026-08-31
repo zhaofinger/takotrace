@@ -9,7 +9,10 @@
   "files": [
     "assets",
     "dist",
-    "README.zh-CN.md"
+    "DEVELOPMENT.md",
+    "PRODUCT.md",
+    "README.zh-CN.md",
+    "TECHNICAL_DESIGN.md"
   ],
   "engines": {
     "node": ">=22"

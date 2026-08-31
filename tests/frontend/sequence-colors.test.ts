@@ -19,7 +19,7 @@ describe("sequence semantic colors", () => {
     const failedRule = styles.match(/\.vbg-custom-sequence__step-row--status-failed,[\s\S]*?\{([^}]*)\}/)?.[1] ?? "";
 
     expect(selectedRule).toContain("background: var(--vbg-sequence-step-bg)");
-    expect(selectedRule).toContain("box-shadow: inset 0 0 0 1px var(--vbg-selection-border)");
+    expect(selectedRule).toContain("box-shadow: inset 0 0 0 1px var(--vbg-sequence-step-border)");
     expect(selectedRule).not.toContain("color-mix");
     expect(failedRule).toContain("--vbg-sequence-step-border:");
   });

@@ -32,6 +32,7 @@ function actionEvents(events: FlowEvent[]): FlowEvent[] {
 
 function actualTimeSpans(events: FlowEvent[]): EventSpan[] {
   return events.flatMap((event) => {
+    if (event.timingSource === "turn-fallback") return [];
     const start = timestampMs(event.startedAt);
     const end = timestampMs(event.completedAt);
     return start !== undefined && end !== undefined && end > start

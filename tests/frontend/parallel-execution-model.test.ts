@@ -33,6 +33,23 @@ describe("parallel execution model", () => {
     expect(groups).toEqual([]);
   });
 
+  it("does not treat turn fallback timestamps as observed overlap", () => {
+    const first = {
+      ...event(1, "item/completed", "first", "completed"),
+      startedAt: "2026-01-01T00:00:01.000Z",
+      completedAt: "2026-01-01T00:00:04.000Z",
+      timingSource: "turn-fallback" as const,
+    };
+    const second = {
+      ...event(2, "item/completed", "second", "completed"),
+      startedAt: "2026-01-01T00:00:02.000Z",
+      completedAt: "2026-01-01T00:00:03.000Z",
+      timingSource: "turn-fallback" as const,
+    };
+
+    expect(parallelExecutionGroups([first, second])).toEqual([]);
+  });
+
   it("recognizes multiple subagent forks before a join as structured parallelism", () => {
     const groups = parallelExecutionGroups([
       collab(1, "fork-a", "spawnAgent", ["child-a"]),

@@ -4,6 +4,7 @@ export function ExecutionMetaSummary({
   from,
   startedAt,
   startedAtLabel,
+  startedAtTitle,
   to,
   type,
 }: {
@@ -12,6 +13,7 @@ export function ExecutionMetaSummary({
   from?: string;
   startedAt: string;
   startedAtLabel: string;
+  startedAtTitle?: string;
   to?: string;
   type?: string;
 }) {
@@ -21,7 +23,7 @@ export function ExecutionMetaSummary({
       <dl className="vbg-custom-execution-meta__facts">
         <div>
           <dt>Started</dt>
-          <dd><time dateTime={startedAt}>{startedAtLabel}</time></dd>
+          <dd><time dateTime={startedAt} title={startedAtTitle}>{startedAtLabel}</time></dd>
         </div>
         <div>
           <dt>{durationLabel}</dt>

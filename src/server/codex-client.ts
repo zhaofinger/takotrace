@@ -171,28 +171,77 @@ export class CodexClient implements TraceProvider {
       const thread = record(result.thread);
       if (!Object.keys(thread).length) return response;
       const rolloutThread = rollout.thread;
-      const rolloutByTurn = new Map((Array.isArray(rolloutThread.turns) ? rolloutThread.turns : []).flatMap((value) => {
+      const rolloutTurns = Array.isArray(rolloutThread.turns) ? rolloutThread.turns : [];
+      const rolloutByTurn = new Map(rolloutTurns.flatMap((value) => {
         const turn = record(value);
+        const items = new Map((Array.isArray(turn.items) ? turn.items : []).flatMap((itemValue) => {
+          const item = record(itemValue);
+          return typeof item.id === 'string' ? [[item.id, item] as const] : [];
+        }));
         return typeof turn.id === 'string'
-          ? [[turn.id, { model: turn.model, tokenUsage: turn.tokenUsage }] as const]
+          ? [[turn.id, {
+            status: turn.status,
+            completedAt: turn.completedAt,
+            model: turn.model,
+            tokenUsage: turn.tokenUsage,
+            items,
+          }] as const]
           : [];
       }));
-      const turns = Array.isArray(thread.turns)
-        ? thread.turns.map((value) => {
+      const appTurns = Array.isArray(thread.turns) ? thread.turns : undefined;
+      const mergedAppTurns = appTurns?.map((value) => {
           const turn = record(value);
           const rolloutTurn = typeof turn.id === 'string' ? rolloutByTurn.get(turn.id) : undefined;
           if (!rolloutTurn) return value;
+          const items = Array.isArray(turn.items)
+            ? turn.items.map((itemValue) => {
+              const item = record(itemValue);
+              const rolloutItem = typeof item.id === 'string' ? rolloutTurn.items.get(item.id) : undefined;
+              if (!rolloutItem) return itemValue;
+              return {
+                ...item,
+                ...(item.startedAt === undefined && rolloutItem.startedAt !== undefined ? { startedAt: rolloutItem.startedAt } : {}),
+                ...(item.completedAt === undefined && rolloutItem.completedAt !== undefined ? { completedAt: rolloutItem.completedAt } : {}),
+                ...(item.durationMs === undefined && rolloutItem.durationMs !== undefined ? { durationMs: rolloutItem.durationMs } : {}),
+              };
+            })
+            : turn.items;
           return {
             ...turn,
+            ...(rolloutTurn.status === 'inProgress' && rolloutTurn.completedAt === undefined
+              ? { status: 'inProgress', completedAt: undefined }
+              : {}),
             ...(turn.model === undefined && rolloutTurn.model !== undefined ? { model: rolloutTurn.model } : {}),
             ...(rolloutTurn.tokenUsage === undefined ? {} : { tokenUsage: rolloutTurn.tokenUsage }),
+            ...(items === undefined ? {} : { items }),
           };
-        })
-        : thread.turns;
+        });
+      const appTurnById = new Map((mergedAppTurns ?? []).flatMap((value) => {
+        const id = record(value).id;
+        return typeof id === 'string' ? [[id, value] as const] : [];
+      }));
+      const missingRolloutTurns = rolloutTurns.filter((value) => {
+        const id = record(value).id;
+        return typeof id === 'string' && !appTurnById.has(id);
+      });
+      const turns = missingRolloutTurns.length
+        ? [
+            ...rolloutTurns.map((value) => {
+              const id = record(value).id;
+              return typeof id === 'string' ? appTurnById.get(id) ?? value : value;
+            }),
+            ...(mergedAppTurns ?? []).filter((value) => {
+              const id = record(value).id;
+              return typeof id !== 'string' || !rolloutByTurn.has(id);
+            }),
+          ]
+        : mergedAppTurns ?? thread.turns;
       return {
         ...result,
         thread: {
           ...thread,
+          ...(missingRolloutTurns.length ? { historySource: 'rollout-file' } : {}),
+          ...(rolloutThread.status && record(rolloutThread.status).type === 'active' ? { status: rolloutThread.status } : {}),
           ...(rolloutThread.tokenUsage === undefined ? {} : { tokenUsage: rolloutThread.tokenUsage }),
           ...(turns === undefined ? {} : { turns }),
         },

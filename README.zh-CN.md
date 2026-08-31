@@ -1,74 +1,69 @@
 <p align="center">
-  <img src="./assets/takotrace-logo.png" alt="TakoTrace logo" width="128" />
+  <img src="./assets/takotrace-logo.png" alt="TakoTrace Logo" width="160" />
 </p>
 
 <h1 align="center">TakoTrace</h1>
 
-<p align="center">本地优先的 Agent 会话观察与执行追踪工具。</p>
+<p align="center">用时间线、时序图和原始事件查看 Codex 与 Claude Code 会话。</p>
+
+<p align="center">
+  <a href="https://github.com/zhaofinger/takotrace/stargazers"><img src="https://img.shields.io/github/stars/zhaofinger/takotrace?style=flat&logo=github" alt="GitHub Stars" /></a>
+  <img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22+" />
+  <img src="https://img.shields.io/badge/Provider-Codex%20%2B%20Claude-2563eb" alt="支持 Codex 与 Claude" />
+  <img src="https://img.shields.io/badge/存储-本地优先-0f766e" alt="本地优先" />
+</p>
 
 <p align="center"><a href="./README.md">English</a></p>
 
-TakoTrace 将 Codex 与 Claude Code 会话整理为可浏览的执行时间线，集中展示消息、推理、工具调用、命令、文件修改、MCP、Skill 与 Subagent 活动。
-
-它读取本地会话历史，精确展示当前进程所管理 Run 的实时事件，并在独立视图中隔离 Codex 与 Claude 会话。
-
-## 核心能力
-
-- 按 Provider 和工作目录浏览 Session。
-- 使用 Trace、Sequence 或 Raw JSON 检查 Run。
-- 追踪命令、文件修改、MCP、Skill 和 Subagent 关系。
-- 查看 Token、Markdown、附件、图片与本地源文件。
-- Codex App Server 解码失败时，从本地 rollout 文件只读恢复历史。
-
-界面使用 **Session**、**Run**、**Step** 等 Agent 通用术语；Raw API 保留 Codex 原始字段名。
+TakoTrace 把本地 AI 编程会话整理成可浏览的执行轨迹。用户请求、Agent 推理、命令、文件修改、MCP 调用、Skill 和 Subagent 都集中在一个界面，不必再翻 rollout 文件或终端日志。
 
 ## 快速开始
 
-需要 Node.js 22+，并至少准备一种运行环境：
-
-- **Codex：** TakoTrace 会自动比较 `PATH` 与 macOS ChatGPT/Codex 应用内置的 `codex`，选择可用的最新版本。可用 `--codex-path` 显式覆盖；探测失败时继续使用 `PATH` 中的 `codex`。
-- **Claude：** 系统可找到 Claude Code，或通过 `--claude-path` 指定路径。
+需要 Node.js 22+，并安装 Codex、Claude Code，或同时安装两者。
 
 ```bash
 npx takotrace
 ```
 
-默认监听 `127.0.0.1:4317`、同时启动两个 Provider 并自动打开浏览器。单个 Provider 启动失败不会影响另一个继续运行。
+TakoTrace 默认监听 `127.0.0.1:4317`，启动可用的 Provider 并打开浏览器。
 
 ```bash
-# 仅启动一个 Provider
+# 只启动一个 Provider
 npx takotrace --provider codex
 npx takotrace --provider claude
 
-# 覆盖 Codex 自动选择结果
+# 指定 Codex 路径
 npx takotrace --codex-path /path/to/codex
 
-# 自定义端口且不自动打开浏览器
+# 修改端口且不自动打开浏览器
 npx takotrace --port 4400 --no-open
 ```
 
-运行 `npx takotrace --help` 查看 `--host`、`--port`、`--provider`、`--codex-path`、`--claude-path` 等完整参数。
+运行 `npx takotrace --help` 查看全部参数。
+
+## 可以查看什么
+
+- 按 Provider 和工作目录分组的 Session。
+- 每个 Run 的 Trace、Sequence 和 Raw JSON。
+- 命令、文件修改、MCP 调用、Skill 与 Subagent 关系。
+- Token 用量、Markdown、附件、图片和本地源文件。
+- Codex App Server 解码失败时，从本地 rollout 文件只读恢复历史。
+
+界面使用 **Session**、**Run**、**Step**，Raw API 保留 Provider 的原始字段名。
 
 ## 数据与安全
 
-- 默认仅绑定 loopback，运行状态保存在内存中。
-- 不增加远程会话存储或遥测；受管 Run 仍会访问所配置的 Codex 或 Claude 服务。
-- Codex rollout 回退和 Claude 历史读取均为只读。
-- 受管会话提供精确实时事件；外部会话通过周期同步获取，可能略有延迟。
-- Claude 登录与认证交给 Claude Code / Agent SDK；TakoTrace 不处理凭据，也不会绕过权限检查。
+TakoTrace 默认只绑定 loopback，运行状态保存在内存中，不增加遥测或远程会话存储。Codex rollout 回退与 Claude 历史访问均为只读，登录和认证仍由 Codex 或 Claude Code 负责。
 
 > [!WARNING]
-> 本地 API 没有通用认证层。不要将服务直接暴露到局域网或公网，包括使用 `--host 0.0.0.0`。
+> 本地 API 没有通用认证层。不要将它直接暴露到局域网或公网，包括使用 `--host 0.0.0.0`。
 
-## 本地开发
+## 文档
 
-```bash
-npm install
-npm run dev
-```
+- [技术设计](./TECHNICAL_DESIGN.md)
+- [产品原则](./PRODUCT.md)
+- [本地开发](./DEVELOPMENT.md)
 
-```bash
-npm test
-npm run typecheck
-npm run build
-```
+<p align="center">
+  <a href="https://github.com/zhaofinger/takotrace"><img src="./assets/star-takotrace.gif" alt="如果 TakoTrace 对你有用，欢迎点亮 Star" width="600" /></a>
+</p>

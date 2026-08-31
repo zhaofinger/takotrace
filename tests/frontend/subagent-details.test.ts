@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventDetails } from "../../src/web/components/EventDetails";
 import {
   SubagentThreadContent,
+  subagentDisplayStatus,
   subagentEventLabel,
   subagentTargetThreadIds,
   subagentThreadOverview,
@@ -58,6 +59,7 @@ describe("subagent detail targets", () => {
     }));
 
     expect(markup).toContain("Loading assigned task and result…");
+    expect(markup).toContain('class="vbg-custom-spinner"');
     expect(markup).not.toContain("Load assigned task and result");
   });
 });
@@ -167,6 +169,19 @@ describe("loaded subagent thread", () => {
     expect(markup).not.toContain("<h4>Result</h4>");
   });
 
+  it("uses the latest turn status when the reusable thread remains active", () => {
+    const thread = threadDetail();
+    thread.status = "running";
+
+    expect(subagentDisplayStatus(thread)).toBe("completed");
+    expect(subagentThreadOverview(thread).active).toBe(false);
+
+    const markup = renderToStaticMarkup(createElement(SubagentThreadContent, { thread }));
+    expect(markup).toContain("completed");
+    expect(markup).toContain("<h4>Result</h4>");
+    expect(markup).not.toContain("<h4>Latest activity</h4>");
+  });
+
   it("keeps an empty child compact and does not offer an unavailable source view", () => {
     const thread = threadDetail();
     thread.turns = [];
@@ -232,7 +247,7 @@ describe("loaded subagent thread", () => {
     expect(markup).toContain("<dt>Fork turns</dt><dd title=\"all\">all</dd>");
   });
 
-  it("explains when the assigned task is encrypted", () => {
+  it("hides an encrypted assigned task while retaining available metadata", () => {
     const thread = threadDetail();
     thread.turns[0]!.items = thread.turns[0]!.items.filter((item) => item.type !== "userMessage");
     const markup = renderToStaticMarkup(createElement(SubagentThreadContent, {
@@ -240,11 +255,12 @@ describe("loaded subagent thread", () => {
       thread,
     }));
 
-    expect(markup).toContain("Unavailable in this recording · encrypted by Codex");
+    expect(markup).not.toContain("<h4>Assigned task</h4>");
+    expect(markup).not.toContain("Unavailable in this recording");
     expect(markup).toContain("private_task");
   });
 
-  it("explains when the source did not record the assigned task", () => {
+  it("hides the assigned task section when the source did not record it", () => {
     const thread = threadDetail();
     thread.turns[0]!.items = thread.turns[0]!.items.filter((item) => item.type !== "userMessage");
     const markup = renderToStaticMarkup(createElement(SubagentThreadContent, {
@@ -252,7 +268,8 @@ describe("loaded subagent thread", () => {
       thread,
     }));
 
-    expect(markup).toContain("Source did not expose the assigned task");
+    expect(markup).not.toContain("<h4>Assigned task</h4>");
+    expect(markup).not.toContain("Source did not expose the assigned task");
   });
 
   it("classifies agent phases and execution events", () => {

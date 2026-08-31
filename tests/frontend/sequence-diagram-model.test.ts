@@ -3,6 +3,7 @@ import type { FlowEvent } from "../../src/web/components/InteractionFlow";
 import {
   SEQUENCE_PARTICIPANTS,
   buildSequenceDiagramModel,
+  compactSequenceSummary,
   compactShellCommand,
   exportMermaidSequence,
 } from "../../src/web/components/sequence-diagram-model";
@@ -83,6 +84,21 @@ describe("sequence-diagram-model", () => {
     expect(model.steps[3].from).toBe("agent");
     expect(model.steps[3].to).toBe("user");
     expect(model.steps[3].type).toBe("return");
+
+    expect(model.steps.map(({ displayIcon, displayTitle }) => ({ displayIcon, displayTitle }))).toEqual([
+      { displayIcon: "user", displayTitle: "Hello agent" },
+      { displayIcon: "activity", displayTitle: "Thinking about the reply" },
+      { displayIcon: "terminal", displayTitle: "ls -la" },
+      { displayIcon: "message", displayTitle: "Here is the list" },
+    ]);
+  });
+
+  it("uses the first meaningful plain-text line for message summaries", () => {
+    expect(compactSequenceSummary("\n**Renaming visible tab**\nMore detail", "Update"))
+      .toBe("Renaming visible tab");
+    expect(compactSequenceSummary("```text\n# Inspect [the page](https://example.com)\n```", "Reasoning"))
+      .toBe("Inspect the page");
+    expect(compactSequenceSummary("No additional detail", "Request")).toBe("Request");
   });
 
   it("uses parent and worker semantics inside a subagent run", () => {

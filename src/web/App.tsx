@@ -56,7 +56,8 @@ export default function App() {
     return () => colorScheme.removeEventListener("change", handleChange);
   }, [theme]);
 
-  const loadState = useCallback(async (signal?: AbortSignal) => {
+  const loadState = useCallback(async (signal?: AbortSignal, foreground = false) => {
+    if (foreground) setLoading(true);
     try {
       const nextState = await fetchState(signal);
       setState(nextState);
@@ -144,11 +145,14 @@ export default function App() {
       setSyncRetryNonce((current) => current + 1);
       return;
     }
-    void loadState();
+    void loadState(undefined, true);
   };
 
   const selectedThread = state.threads.find((thread) => thread.id === selectedThreadId);
-  const threadLoading = selectedThreadId ? syncingThreads.has(selectedThreadId) : false;
+  const threadLoading = Boolean(
+    selectedThreadId
+    && (selectedThread?.turnsLoaded === false || syncingThreads.has(selectedThreadId)),
+  );
   const turns = useMemo(() => selectedThread?.turns ?? [], [selectedThread]);
 
   useEffect(() => {

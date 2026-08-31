@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatDateTimeWithMilliseconds } from "../formatters";
+import { formatClockTime, formatDateTimeWithMilliseconds } from "../formatters";
 import { handleRovingTabKey } from "../roving-tabs";
 import { eventRaw } from "../trace-event";
 import type { TraceStatus } from "../types";
@@ -47,11 +47,13 @@ function InspectorValue({ value }: { value: unknown }) {
 }
 
 export function ExecutionInspector({
+  autoFocusClose = true,
   item,
   onClose,
   onOpenSubagent,
   subagentView = "trace",
 }: {
+  autoFocusClose?: boolean;
   item: ExecutionInspectorItem;
   onClose: () => void;
   onOpenSubagent?: OpenSubagentHandler;
@@ -80,14 +82,14 @@ export function ExecutionInspector({
             <span className={`vbg-custom-sequence__inspector-kind vbg-custom-sequence__inspector-kind--${kind}`}>
               {kindLabel.toUpperCase()}
             </span>
-            <span className="vbg-custom-sequence__step-num">Step {item.seq}</span>
+            <span aria-label={`Step ${item.seq}`} className="vbg-custom-sequence__inspector-step">#{item.seq}</span>
           </div>
           <strong title={item.fullTitle ?? item.title}>{item.title}</strong>
         </div>
         <div className="vbg-custom-sequence__inspector-actions">
           <StatusMark status={statusLabel} />
           <button
-            autoFocus
+            autoFocus={autoFocusClose}
             type="button"
             className="vbg-custom-sequence__inspector-close"
             onClick={onClose}
@@ -130,7 +132,8 @@ export function ExecutionInspector({
               duration={item.durationMs === undefined ? undefined : `${item.durationMs}ms`}
               durationLabel="Event latency"
               startedAt={startedAt}
-              startedAtLabel={formatDateTimeWithMilliseconds(startedAt)}
+              startedAtLabel={formatClockTime(startedAt)}
+              startedAtTitle={formatDateTimeWithMilliseconds(startedAt)}
             />
             <EventDetails
               autoLoadSubagent
@@ -147,7 +150,8 @@ export function ExecutionInspector({
               duration={item.durationMs === undefined ? undefined : `${item.durationMs}ms`}
               from={item.from}
               startedAt={startedAt}
-              startedAtLabel={formatDateTimeWithMilliseconds(startedAt)}
+              startedAtLabel={formatClockTime(startedAt)}
+              startedAtTitle={formatDateTimeWithMilliseconds(startedAt)}
               to={item.to}
               type={item.type}
             />

@@ -11,6 +11,7 @@ import { eventRaw, normalizedEventType } from "../trace-event";
 import { nonEmptyText as text, type UnknownRecord } from "../value-utils";
 import type { SubagentDetailView } from "./EventDetails";
 import { MarkdownContent } from "./MarkdownContent";
+import { LoadingState } from "./LoadingState";
 import { StatusMark } from "./StatusMark";
 
 type RecordValue = UnknownRecord;
@@ -78,12 +79,6 @@ export function subagentThreadSummary(
   };
 }
 
-function unavailableAssignmentMessage(assignment?: SubagentAssignment): string {
-  return assignment?.availability === "encrypted"
-    ? "Unavailable in this recording · encrypted by Codex"
-    : "Source did not expose the assigned task";
-}
-
 const TERMINAL_SUBAGENT_STATUSES = new Set([
   "blocked",
   "cancelled",
@@ -100,6 +95,10 @@ function isActiveSubagentStatus(status: string): boolean {
   return !TERMINAL_SUBAGENT_STATUSES.has(status.toLowerCase());
 }
 
+export function subagentDisplayStatus(thread: ThreadDetail): string {
+  return thread.turns.at(-1)?.status || thread.status;
+}
+
 export function subagentThreadOverview(thread: ThreadDetail): {
   active: boolean;
   durationMs?: number;
@@ -108,7 +107,7 @@ export function subagentThreadOverview(thread: ThreadDetail): {
 } {
   const turn = thread.turns.at(-1);
   const items = turn?.items ?? [];
-  const active = isActiveSubagentStatus(thread.status);
+  const active = isActiveSubagentStatus(subagentDisplayStatus(thread));
   const startedAt = turn?.startedAt ? Date.parse(turn.startedAt) : undefined;
   const completedAt = turn?.completedAt ? Date.parse(turn.completedAt) : undefined;
   const timestampDuration = typeof startedAt === "number" && Number.isFinite(startedAt)
@@ -144,6 +143,7 @@ export function SubagentThreadContent({
 }) {
   const summary = subagentThreadSummary(thread, fallbackInput, assignment);
   const overview = subagentThreadOverview(thread);
+  const displayStatus = subagentDisplayStatus(thread);
   const model = thread.turns.at(-1)?.model;
   const identityMeta = [thread.agentRole, thread.agentPath].filter(Boolean);
   const activity = overview.active ? overview.latestActivity : summary.result;
@@ -168,7 +168,7 @@ export function SubagentThreadContent({
             )}
           </div>
           <div className="vbg-custom-subagent-thread__actions">
-            <StatusMark status={thread.status} />
+            <StatusMark status={displayStatus} />
             {onOpenThread && thread.turns.length > 0 && (
               <button onClick={() => onOpenThread(thread)} type="button">Open {detailView}</button>
             )}
@@ -185,20 +185,22 @@ export function SubagentThreadContent({
             {assignment.forkTurns && <div><dt>Fork turns</dt><dd title={assignment.forkTurns}>{assignment.forkTurns}</dd></div>}
           </dl>
         )}
-        <div className="vbg-custom-subagent-thread__summary">
-          <section>
-            <h4>Assigned task</h4>
-            {summary.assignedTask
-              ? <MarkdownContent>{summary.assignedTask}</MarkdownContent>
-              : <p className="vbg-custom-subagent-thread__empty">{unavailableAssignmentMessage(assignment)}</p>}
-          </section>
-          <section>
-            <h4>{overview.active ? "Latest activity" : "Result"}</h4>
-            {activity
-              ? <MarkdownContent>{activity}</MarkdownContent>
-              : <p className="vbg-custom-subagent-thread__empty">Not recorded yet</p>}
-          </section>
-        </div>
+        {(summary.assignedTask || activity) && (
+          <div className="vbg-custom-subagent-thread__summary">
+            {summary.assignedTask && (
+              <section>
+                <h4>Assigned task</h4>
+                <MarkdownContent>{summary.assignedTask}</MarkdownContent>
+              </section>
+            )}
+            {activity && (
+              <section>
+                <h4>{overview.active ? "Latest activity" : "Result"}</h4>
+                <MarkdownContent>{activity}</MarkdownContent>
+              </section>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );
@@ -282,7 +284,12 @@ function TargetThread({
     );
   }
   if (snapshot.status === "loading" || snapshot.status === "idle") {
-    return <p aria-live="polite" className="vbg-custom-subagent-loading">Loading assigned task and result…</p>;
+    return (
+      <LoadingState
+        className="vbg-custom-subagent-loading"
+        label="Loading assigned task and result…"
+      />
+    );
   }
   if (snapshot.status === "error") {
     return (

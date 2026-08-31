@@ -8,6 +8,8 @@ import {
 import type { FlowEvent } from "../../src/web/components/InteractionFlow";
 import {
   nextSequenceStepIndex,
+  sequenceTooltipContent,
+  sequenceTooltipLayout,
   SequenceDiagram,
 } from "../../src/web/components/SequenceDiagram";
 import { buildSequenceDiagramModel } from "../../src/web/components/sequence-diagram-model";
@@ -62,6 +64,8 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain("User");
     expect(markup).toContain("Agent");
     expect(markup).toContain("Tools");
+    expect(markup).toContain('aria-label="Trace overview"');
+    expect(markup).toContain("vbg-custom-sequence__overview");
     expect(markup).toContain("vbg-custom-sequence__workspace");
     expect(markup).toContain("vbg-custom-sequence__step-row");
     expect(markup).toContain("vbg-custom-sequence__step-row--role-user");
@@ -69,7 +73,7 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain("vbg-custom-sequence__step-row--role-agent");
     expect(markup).toContain("vbg-custom-sequence__step-icon");
     expect(markup).toContain(">git status</strong>");
-    expect(markup).toContain('data-tooltip="Shell · git status"');
+    expect(markup).toContain('data-tooltip="git status"');
     expect(markup.match(/tabindex="0"/g)).toHaveLength(1);
     expect(markup.match(/tabindex="-1"/g)).toHaveLength(2);
   });
@@ -96,6 +100,23 @@ describe("SequenceDiagram Component", () => {
     expect(nextSequenceStepIndex(2, 4, "Home")).toBe(0);
     expect(nextSequenceStepIndex(1, 4, "End")).toBe(3);
     expect(nextSequenceStepIndex(1, 4, "ArrowRight")).toBeNull();
+  });
+
+  it("keeps a long content tooltip inside the viewport", () => {
+    expect(sequenceTooltipLayout(
+      { bottom: 710, left: 900, top: 680, width: 180 },
+      { height: 720, width: 1024 },
+    )).toEqual({
+      above: true,
+      left: 772,
+      maxHeight: 320,
+      top: 672,
+    });
+  });
+
+  it("falls back to the full title when event content is blank", () => {
+    expect(sequenceTooltipContent({ detail: "  \n", detailTitle: "Shell · npm test" }))
+      .toBe("Shell · npm test");
   });
 
   it("makes lifecycle parallelism visible in the sequence UI", () => {
@@ -126,12 +147,14 @@ describe("SequenceDiagram Component", () => {
   });
 
   it("renders compact shell command titles without hiding failure state", () => {
-    const command = '/bin/zsh -lc "zsh -lc \\"rg -n sequence src/web\\""';
+    const command = '/bin/zsh -lc "zsh -lc \\"rg -n sequence src/web\\""\necho complete-content';
     const markup = renderToStaticMarkup(createElement(SequenceDiagram, {
       items: [createEvent("commandExecution", { command }, { status: "failed" })],
     }));
 
     expect(markup).toContain(">rg -n sequence src/web</strong>");
+    expect(markup).toContain("echo complete-content");
+    expect(markup).not.toContain('data-tooltip="Shell ·');
     expect(markup).toContain("vbg-custom-sequence__step-row--status-failed");
     expect(markup).toContain("failed");
   });
@@ -146,7 +169,7 @@ describe("SequenceDiagram Component", () => {
 
     expect(markup).toContain("vbg-custom-sequence__step-icon");
     expect(markup).toContain(">read</strong>");
-    expect(markup).toContain('data-tooltip="Skill load · read (inferred)"');
+    expect(markup).toContain('data-tooltip="cat /Users/bytedance/.agents/skills/read/SKILL.md"');
   });
 
   it("uses an icon and compact action for Browser MCP executions", () => {
@@ -163,7 +186,7 @@ describe("SequenceDiagram Component", () => {
 
     expect(markup).toContain("vbg-custom-sequence__step-icon");
     expect(markup).toContain(">Inspect the page</strong>");
-    expect(markup).toContain('data-tooltip="Browser · Inspect the page"');
+    expect(markup).toContain('&quot;code&quot;: &quot;await browser.tabs.list()&quot;');
   });
 
   it("organizes step details into focused inspector tabs", () => {
@@ -199,11 +222,28 @@ describe("SequenceDiagram Component", () => {
     expect(markup).toContain("Overview");
     expect(markup).toContain("Raw event");
     expect(markup).toContain("TOOL");
+    expect(markup).toContain('aria-label="Step 1"');
+    expect(markup).toContain(">#1</span>");
     expect(markup).toContain(`<strong title="${step.detailTitle}">${step.displayTitle}</strong>`);
     expect(markup).toContain('role="tabpanel"');
     expect(markup).toContain('autofocus=""');
     expect(markup).toContain("Content");
     expect(markup).toContain("working tree clean");
+    expect(markup).toMatch(/<time dateTime="2026-01-01T00:00:00\.000Z" title="[^"]+">\d{2}:\d{2}:\d{2}<\/time>/);
+    expect(markup).not.toMatch(/<time[^>]*>\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("keeps focus on a selected sequence step for vertical keyboard navigation", () => {
+    const selectedStepId = buildSequenceDiagramModel(sampleItems).steps[0].id;
+    const markup = renderToStaticMarkup(createElement(SequenceDiagram, {
+      initialSelectedStepId: selectedStepId,
+      items: sampleItems,
+    }));
+
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain("Close execution details");
+    expect(markup).not.toContain('autofocus=""');
+    expect(markup).toContain('aria-pressed="true"');
   });
 
   it("restores focus to the selected step after the inspector closes", () => {

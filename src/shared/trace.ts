@@ -221,9 +221,9 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
       const itemId = stringAt(item, ['id']);
       if (!itemId) return [];
       const type = stringAt(item, ['type']) ?? 'item';
-      const returnedMessage = type.toLowerCase() === 'agentmessage' && stringAt(item, ['text']) !== undefined;
-      const itemStatus = returnedMessage && item.status === undefined ? 'completed' : entityStatus(item.status);
-      const finalStatus = itemStatus === 'pending' ? status : itemStatus;
+      // Items returned by thread/read are committed history entries. Their status is
+      // independent from the containing turn, which may still be running or interrupted.
+      const finalStatus = item.status === undefined ? 'completed' : entityStatus(item.status);
       const method = ['completed', 'interrupted', 'failed'].includes(finalStatus) ? 'item/completed' : 'item/started';
       const itemStartedAt = typeof item.startedAt === 'number' ? isoAt(item.startedAt, at) : undefined;
       const itemCompletedAt = typeof item.completedAt === 'number' ? isoAt(item.completedAt, at) : undefined;
@@ -241,6 +241,7 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
         provider,
         summary: summaryFor(method, { item }),
         durationMs: numberAt(item, ['durationMs']),
+        timingSource: itemStartedAt !== undefined || itemCompletedAt !== undefined ? 'observed' : 'turn-fallback',
         raw: rawItem,
       }];
     });

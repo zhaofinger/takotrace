@@ -72,6 +72,7 @@
   --vbg-surface-contrast: oklch(0.205 0 0);
   --vbg-text-primary: var(--vbg-gray-1000);
   --vbg-text-secondary: var(--vbg-gray-900);
+  --vbg-text-tertiary: light-dark(oklch(0.5 0 0), oklch(0.64 0 0));
   --vbg-text-on-contrast: oklch(0.946 0 0);
   --vbg-text-on-contrast-secondary: oklch(0.72 0 0);
   --vbg-border-subtle: var(--vbg-gray-alpha-300);
@@ -897,6 +898,7 @@
 :where(.vbg-report) .vbg-band[data-tone="contrast"] {
   --vbg-text-primary: var(--vbg-text-on-contrast);
   --vbg-text-secondary: var(--vbg-text-on-contrast-secondary);
+  --vbg-text-tertiary: oklch(0.64 0 0);
   --vbg-border-subtle: var(--vbg-border-on-contrast);
   --vbg-border-default: var(--vbg-border-on-contrast);
   --vbg-border-strong: var(--vbg-text-on-contrast);

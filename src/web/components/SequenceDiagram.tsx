@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useClipboardCopy } from "../useClipboardCopy";
+import { ExecutionOverview } from "./ExecutionOverview";
 import {
   ExecutionInspector,
   restoreFocusAfterInspectorClose,
@@ -16,6 +17,7 @@ import {
 import type { OpenSubagentHandler } from "./EventDetails";
 import type { FlowEvent } from "./InteractionFlow";
 import { Icon } from "./Icon";
+import { MarkdownContent } from "./MarkdownContent";
 import { StatusMark } from "./StatusMark";
 import {
   buildSequenceDiagramModel,
@@ -49,9 +51,37 @@ function sequenceInspectorItem(
 interface SequenceStepTooltipState {
   above: boolean;
   left: number;
+  maxHeight: number;
   stepId: string;
   text: string;
   top: number;
+}
+
+export function sequenceTooltipLayout(
+  rect: Pick<DOMRect, "bottom" | "left" | "top" | "width">,
+  viewport: { height: number; width: number },
+) {
+  const edgePadding = 12;
+  const maxWidth = Math.max(1, Math.min(480, viewport.width - edgePadding * 2));
+  const halfWidth = maxWidth / 2;
+  const belowSpace = Math.max(0, viewport.height - rect.bottom - edgePadding);
+  const aboveSpace = Math.max(0, rect.top - edgePadding);
+  const above = belowSpace < Math.min(240, aboveSpace);
+  return {
+    above,
+    left: Math.min(
+      Math.max(rect.left + rect.width / 2, edgePadding + halfWidth),
+      viewport.width - edgePadding - halfWidth,
+    ),
+    maxHeight: Math.max(24, Math.min(320, above ? aboveSpace : belowSpace)),
+    top: above ? rect.top - 8 : rect.bottom + 8,
+  };
+}
+
+export function sequenceTooltipContent(
+  step: Pick<SequenceStep, "detail" | "detailTitle">,
+): string {
+  return step.detail.trim() || step.detailTitle;
 }
 
 export function nextSequenceStepIndex(
@@ -84,6 +114,7 @@ export function SequenceDiagram({
   const { copy: copyToClipboard, state: copyState } = useClipboardCopy(items, 2_000);
   const [stepTooltip, setStepTooltip] = useState<SequenceStepTooltipState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const tooltipCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const model = useMemo(
     () => buildSequenceDiagramModel(items, scope, threadContext),
@@ -95,9 +126,20 @@ export function SequenceDiagram({
     [model.steps, selectedStepId],
   );
 
+  const selectOverviewItem = (eventId: string) => {
+    const step = model.steps.find((item) => item.id === `seq-${eventId}`);
+    if (!step) return;
+    setStepTooltip(null);
+    setSelectedStepId((current) => current === step.id ? null : step.id);
+  };
+
   useEffect(() => {
     if (selectedStepId && !selectedStep) setSelectedStepId(null);
   }, [selectedStep, selectedStepId]);
+
+  useEffect(() => () => {
+    if (tooltipCloseTimerRef.current) clearTimeout(tooltipCloseTimerRef.current);
+  }, []);
 
   useLayoutEffect(() => {
     if (!selectedStep) return;
@@ -121,22 +163,32 @@ export function SequenceDiagram({
     restoreFocusAfterInspectorClose(stepButtonId);
   };
 
+  const cancelTooltipClose = () => {
+    if (!tooltipCloseTimerRef.current) return;
+    clearTimeout(tooltipCloseTimerRef.current);
+    tooltipCloseTimerRef.current = null;
+  };
+
+  const closeStepTooltip = (delay = 0) => {
+    cancelTooltipClose();
+    if (delay === 0) {
+      setStepTooltip(null);
+      return;
+    }
+    tooltipCloseTimerRef.current = setTimeout(() => {
+      tooltipCloseTimerRef.current = null;
+      setStepTooltip(null);
+    }, delay);
+  };
+
   const showStepTooltip = (target: HTMLElement, step: SequenceStep) => {
-    if (step.detailTitle === step.displayTitle && target.scrollWidth <= target.clientWidth) return;
+    cancelTooltipClose();
     const rect = target.getBoundingClientRect();
-    const maxWidth = Math.min(480, window.innerWidth - 24);
-    const halfWidth = maxWidth / 2;
-    const left = Math.min(
-      Math.max(rect.left + rect.width / 2, 12 + halfWidth),
-      window.innerWidth - 12 - halfWidth,
-    );
-    const above = rect.bottom + 96 > window.innerHeight;
+    const layout = sequenceTooltipLayout(rect, { height: window.innerHeight, width: window.innerWidth });
     setStepTooltip({
-      above,
-      left,
       stepId: step.id,
-      text: step.detailTitle,
-      top: above ? rect.top - 8 : rect.bottom + 8,
+      text: sequenceTooltipContent(step),
+      ...layout,
     });
   };
 
@@ -178,6 +230,14 @@ export function SequenceDiagram({
           <p>No sequence events to display for this run.</p>
         </div>
       ) : (
+        <>
+        <div className="vbg-custom-sequence__overview">
+          <ExecutionOverview
+            items={items}
+            onSelect={selectOverviewItem}
+            selectedId={selectedStep?.id.replace(/^seq-/, "")}
+          />
+        </div>
         <div className={`vbg-custom-sequence__workspace${selectedStep ? " vbg-custom-sequence__workspace--with-inspector" : ""}`}>
           <button
             type="button"
@@ -195,7 +255,7 @@ export function SequenceDiagram({
             ref={canvasRef}
             className="vbg-custom-sequence__canvas"
             aria-label="Sequence interaction flow"
-            onScroll={() => setStepTooltip(null)}
+            onScroll={() => closeStepTooltip()}
           >
             <div className="vbg-custom-sequence__diagram" style={diagramStyle}>
             <div className="vbg-custom-sequence__lifelines-header">
@@ -281,7 +341,7 @@ export function SequenceDiagram({
                         aria-controls={isSelected ? "execution-inspector" : undefined}
                         aria-describedby={stepTooltip?.stepId === step.id ? "sequence-step-tooltip" : undefined}
                         aria-label={`Step ${step.seq}: ${step.label} - ${step.detailTitle}, ${participantLabels.get(step.from) ?? step.from} to ${step.toLabel ?? participantLabels.get(step.to) ?? step.to}${parallelGroup ? `, ${parallelGroup.label}` : ""}`}
-                        onBlur={() => setStepTooltip(null)}
+                        onBlur={() => closeStepTooltip()}
                         onFocus={(event) => {
                           if (!event.currentTarget.matches(":focus-visible")) return;
                           const title = event.currentTarget.querySelector<HTMLElement>(".vbg-custom-sequence__step-title");
@@ -310,9 +370,9 @@ export function SequenceDiagram({
                                 )}
                                 <strong
                                   className={`vbg-custom-sequence__step-title${step.isCommand ? " vbg-custom-sequence__step-title--command" : ""}`}
-                                  data-tooltip={step.detailTitle}
+                                  data-tooltip={sequenceTooltipContent(step)}
                                   onMouseEnter={(event) => showStepTooltip(event.currentTarget, step)}
-                                  onMouseLeave={() => setStepTooltip(null)}
+                                  onMouseLeave={() => closeStepTooltip(100)}
                                 >
                                   {step.displayTitle}
                                 </strong>
@@ -340,9 +400,9 @@ export function SequenceDiagram({
                                 )}
                                 <strong
                                   className={`vbg-custom-sequence__step-title${step.isCommand ? " vbg-custom-sequence__step-title--command" : ""}`}
-                                  data-tooltip={step.detailTitle}
+                                  data-tooltip={sequenceTooltipContent(step)}
                                   onMouseEnter={(event) => showStepTooltip(event.currentTarget, step)}
-                                  onMouseLeave={() => setStepTooltip(null)}
+                                  onMouseLeave={() => closeStepTooltip(100)}
                                 >
                                   {step.displayTitle}
                                 </strong>
@@ -361,6 +421,7 @@ export function SequenceDiagram({
           {selectedStep && (
             <ExecutionInspector
               key={selectedStep.id}
+              autoFocusClose={false}
               item={sequenceInspectorItem(selectedStep, participantLabels)}
               onClose={closeInspector}
               onOpenSubagent={onOpenSubagent}
@@ -368,15 +429,18 @@ export function SequenceDiagram({
             />
           )}
         </div>
+        </>
       )}
       {stepTooltip && typeof document !== "undefined" && createPortal(
         <div
           className={`vbg-custom-sequence__tooltip${stepTooltip.above ? " vbg-custom-sequence__tooltip--above" : ""}`}
           id="sequence-step-tooltip"
+          onMouseEnter={cancelTooltipClose}
+          onMouseLeave={() => closeStepTooltip()}
           role="tooltip"
-          style={{ left: stepTooltip.left, top: stepTooltip.top }}
+          style={{ left: stepTooltip.left, maxHeight: stepTooltip.maxHeight, top: stepTooltip.top }}
         >
-          {stepTooltip.text}
+          <MarkdownContent>{stepTooltip.text}</MarkdownContent>
         </div>,
         document.body,
       )}

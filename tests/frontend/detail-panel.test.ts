@@ -12,8 +12,8 @@ import {
 describe("DetailPanel polish", () => {
   it("opens subagent details in the source view and restores its selection id", () => {
     expect(subagentNavigation("trace", "event-7")).toEqual({
-      sourceSelectionId: "event-7",
-      tab: "trace",
+      sourceSelectionId: "seq-event-7",
+      tab: "sequence",
     });
     expect(subagentNavigation("sequence", "event-7")).toEqual({
       sourceSelectionId: "seq-event-7",
@@ -36,15 +36,17 @@ describe("DetailPanel polish", () => {
 
   it("exposes a single keyboard tab stop for the active detail tab", () => {
     const markup = renderToStaticMarkup(createElement(DetailPanel, {}));
-    expect(markup).toContain('id="turn-trace-tab"');
+    expect(markup).toContain(">Trace</button>");
+    expect(markup).not.toContain(">Sequence</button>");
+    expect(markup).not.toContain('id="turn-trace-tab"');
     expect(markup).toContain('id="turn-sequence-tab"');
     expect(markup).toContain('id="turn-json-tab"');
     expect(markup).not.toContain('id="turn-events-tab"');
     const tabs = markup.match(/<button[^>]+role="tab"[^>]*>/g) ?? [];
-    expect(tabs[0]).toContain('id="turn-trace-tab"');
-    expect(tabs[1]).toContain('id="turn-sequence-tab"');
+    expect(tabs[0]).toContain('id="turn-sequence-tab"');
+    expect(tabs[1]).toContain('id="turn-json-tab"');
     expect(tabs.filter((tab) => tab.includes('tabindex="0"'))).toHaveLength(1);
-    expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(2);
+    expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(1);
   });
 
   it("renders a compact single-line summary without the repeated thread id", () => {
@@ -83,7 +85,7 @@ describe("DetailPanel polish", () => {
     expect(markup).not.toContain('vbg-custom-turn-meta-line');
   });
 
-  it("keeps the full-detail loading state out of the visible layout", () => {
+  it("shows loading instead of a false empty trace while full run detail is loading", () => {
     const markup = renderToStaticMarkup(createElement(DetailPanel, {
       isLoading: true,
       turn: {
@@ -94,8 +96,24 @@ describe("DetailPanel polish", () => {
     }));
 
     expect(markup).toContain('aria-busy="true"');
-    expect(markup).toContain('class="vbg-custom-sr-only" role="status">Loading full run detail…</span>');
-    expect(markup).not.toContain('class="vbg-custom-detail-state">Loading full run detail…</p>');
+    expect(markup).toContain('class="vbg-custom-loading-state" role="status"');
+    expect(markup).toContain('class="vbg-custom-spinner"');
+    expect(markup).toContain('Loading run details…');
+    expect(markup).not.toContain('No sequence events to display');
+  });
+
+  it("does not pair a failed detail request with a false empty trace", () => {
+    const markup = renderToStaticMarkup(createElement(DetailPanel, {
+      error: "Unable to load run detail",
+      turn: {
+        id: "turn-1",
+        status: "completed",
+        items: [],
+      },
+    }));
+
+    expect(markup).toContain("Unable to load run detail");
+    expect(markup).not.toContain("No sequence events to display");
   });
 
   it("omits the model fact when the run did not record one", () => {
