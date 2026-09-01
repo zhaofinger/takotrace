@@ -1,6 +1,6 @@
 {
   "name": "takotrace",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Local-first session inspector and execution tracer for Codex and Claude agents",
   "repository": {
     "type": "git",
