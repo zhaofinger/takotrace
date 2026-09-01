@@ -22,6 +22,7 @@
     "session-inspector",
     "subagent"
   ],
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "takotrace": "dist/cli.js"
@@ -30,8 +31,10 @@
     "assets",
     "dist",
     "DEVELOPMENT.md",
+    "NOTICE",
     "PRODUCT.md",
     "README.zh-CN.md",
+    "THIRD_PARTY_NOTICES.md",
     "TECHNICAL_DESIGN.md"
   ],
   "engines": {

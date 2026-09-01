@@ -1,5 +1,9 @@
 /* vbg-bundle:start */
 /*
+ * This file incorporates modified styling primitives published by Vercel.
+ * The underlying third-party material is not covered by TakoTrace's
+ * Apache-2.0 license. See THIRD_PARTY_NOTICES.md.
+ *
  * Composable Vercel report primitives derived from Geist color, type, and
  * spacing semantics. All selectors and custom properties are namespaced.
  * GeistCN source snapshot: 4f5d9c0da9ad400918e15083c83626572f19fd9b
@@ -546,34 +550,6 @@
   width: auto;
   max-width: 128px;
   height: 18px;
-}
-
-/* Remote SVG documents do not inherit currentColor through <img>. Masks do. */
-:where(.vbg-report) .vbg-wordmark,
-:where(.vbg-report) .vbg-logo {
-  display: inline-block;
-  flex: none;
-  background: currentColor;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-}
-
-:where(.vbg-report) .vbg-wordmark {
-  width: 92px;
-  height: 18px;
-  -webkit-mask-image: url("https://py8fhxnkzwtsqdo9.public.blob.vercel-storage.com/p/vercel-wordmark.svg");
-  mask-image: url("https://py8fhxnkzwtsqdo9.public.blob.vercel-storage.com/p/vercel-wordmark.svg");
-}
-
-:where(.vbg-report) .vbg-logo {
-  width: 16px;
-  height: 14px;
-  -webkit-mask-image: url("https://py8fhxnkzwtsqdo9.public.blob.vercel-storage.com/p/vercel-logo.svg");
-  mask-image: url("https://py8fhxnkzwtsqdo9.public.blob.vercel-storage.com/p/vercel-logo.svg");
 }
 
 :where(.vbg-report) .vbg-document-meta {
@@ -2679,19 +2655,6 @@
   margin-block: 0;
 }
 
-:where(.vbg-report) .vbg-footer > .vbg-logo {
-  grid-column: 1;
-  color: var(--vbg-text-primary);
-}
-
-@supports selector(.vbg-footer:has(> :nth-child(2):last-child)) {
-  :where(.vbg-report) .vbg-footer:has(> .vbg-logo:first-child):has(> :nth-child(2):last-child) > :nth-child(2) {
-    grid-column: 8 / -1;
-    justify-self: end;
-    text-align: end;
-  }
-}
-
 :where(.vbg-report) select {
   background-color: var(--vbg-background-100);
 }
@@ -2786,11 +2749,6 @@
     grid-column: 1 / -1;
   }
 
-  @supports selector(.vbg-footer:has(> :nth-child(2):last-child)) {
-    :where(.vbg-report) .vbg-footer:has(> .vbg-logo:first-child):has(> :nth-child(2):last-child) > :nth-child(2) {
-      grid-column: 4 / -1;
-    }
-  }
 }
 
 @media (max-width: 599px) {
@@ -2814,15 +2772,6 @@
     grid-column: 1 / -1;
   }
 
-  :where(.vbg-report) .vbg-footer > .vbg-logo {
-    grid-column: 1;
-  }
-
-  @supports selector(.vbg-footer:has(> :nth-child(2):last-child)) {
-    :where(.vbg-report) .vbg-footer:has(> .vbg-logo:first-child):has(> :nth-child(2):last-child) > :nth-child(2) {
-      grid-column: 2 / -1;
-    }
-  }
 }
 
 @media (max-width: 800px) {

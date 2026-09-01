@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22+" />
   <img src="https://img.shields.io/badge/Provider-Codex%20%2B%20Claude-2563eb" alt="支持 Codex 与 Claude" />
   <img src="https://img.shields.io/badge/存储-本地优先-0f766e" alt="本地优先" />
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0 许可证" /></a>
 </p>
 
 <p align="center"><a href="./README.md">English</a></p>
@@ -63,3 +64,7 @@ TakoTrace 默认只绑定 loopback，运行状态保存在内存中，不增加�
 
 > [!WARNING]
 > 本地 API 没有通用认证层。不要将它直接暴露到局域网或公网，包括使用 `--host 0.0.0.0`。
+
+## 许可证
+
+TakoTrace 自有代码采用 [Apache License 2.0](./LICENSE)。单独适用其他条款的材料请参阅[第三方声明](./THIRD_PARTY_NOTICES.md)。

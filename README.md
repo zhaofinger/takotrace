@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22+" />
   <img src="https://img.shields.io/badge/providers-Codex%20%2B%20Claude-2563eb" alt="Codex and Claude support" />
   <img src="https://img.shields.io/badge/storage-local--first-0f766e" alt="Local-first storage" />
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0 license" /></a>
 </p>
 
 <p align="center"><a href="./README.zh-CN.md">中文</a></p>
@@ -63,3 +64,7 @@ TakoTrace binds to loopback by default, keeps runtime state in memory, and adds 
 
 > [!WARNING]
 > The local API has no general authentication layer. Do not expose it directly to a LAN or the public internet, including with `--host 0.0.0.0`.
+
+## License
+
+TakoTrace's original code is licensed under the [Apache License 2.0](./LICENSE). See [Third-Party Notices](./THIRD_PARTY_NOTICES.md) for material governed separately.
