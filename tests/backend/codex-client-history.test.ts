@@ -88,8 +88,14 @@ describe('CodexClient history sync', () => {
       const directory = join(codexHome, 'sessions', '2026', '08', '25');
       await mkdir(directory, { recursive: true });
       await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${threadId}.jsonl`), [
-        JSON.stringify({ timestamp: '2026-08-25T12:58:38.000Z', type: 'session_meta', payload: { id: threadId } }),
-        JSON.stringify({ timestamp: '2026-08-25T12:58:39.000Z', type: 'turn_context', payload: { turn_id: turnId } }),
+        JSON.stringify({
+          timestamp: '2026-08-25T12:58:38.000Z', type: 'session_meta',
+          payload: { id: threadId, base_instructions: { text: 'Base rules' } },
+        }),
+        JSON.stringify({
+          timestamp: '2026-08-25T12:58:39.000Z', type: 'turn_context',
+          payload: { turn_id: turnId, effort: 'high' },
+        }),
         JSON.stringify({
           timestamp: '2026-08-25T12:58:40.000Z', type: 'event_msg', payload: {
             type: 'token_count', info: {
@@ -110,13 +116,19 @@ describe('CodexClient history sync', () => {
         thread: {
           historySource: string;
           tokenUsage: { total: { totalTokens: number } };
-          turns: Array<{ tokenUsage: { totalTokens: number }; items: unknown[] }>;
+          turns: Array<{
+            tokenUsage: { totalTokens: number };
+            context: { session: Record<string, unknown>; turn: Record<string, unknown> };
+            items: unknown[];
+          }>;
         };
       };
 
       expect(result.thread.historySource).toBe('app-server');
       expect(result.thread.tokenUsage.total.totalTokens).toBe(100);
       expect(result.thread.turns[0].tokenUsage.totalTokens).toBe(100);
+      expect(result.thread.turns[0].context.session).toMatchObject({ base_instructions: { text: 'Base rules' } });
+      expect(result.thread.turns[0].context.turn).toMatchObject({ effort: 'high' });
       expect(result.thread.turns[0].items).toEqual([{ id: 'app-item' }]);
     } finally {
       await rm(codexHome, { recursive: true, force: true });

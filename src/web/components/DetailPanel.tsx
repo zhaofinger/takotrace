@@ -11,7 +11,8 @@ import {
 import { handleRovingTabKey } from "../roving-tabs";
 import type { CompactTurn, ThreadDetail, TokenUsageBreakdown, Turn } from "../types";
 import { CopyIconButton } from "./CopyIconButton";
-import { EventDetails, type SubagentDetailView } from "./EventDetails";
+import { ContextDetails } from "./ContextDetails";
+import { EventDetails } from "./EventDetails";
 import { HighlightedCode } from "./HighlightedCode";
 import { Icon } from "./Icon";
 import { LoadingState } from "./LoadingState";
@@ -37,20 +38,12 @@ interface TokenPopoverState {
   top: number;
 }
 
-type DetailTab = "sequence" | "json" | "events";
+type DetailTab = "sequence" | "context" | "json" | "events";
 
 interface SubagentFrame {
-  returnTab: DetailTab;
   sourceSelectionId: string;
   thread: ThreadDetail;
   turnId: string;
-}
-
-export function subagentNavigation(_sourceView: SubagentDetailView, sourceEventId: string) {
-  return {
-    sourceSelectionId: `seq-${sourceEventId}`,
-    tab: "sequence",
-  } as const;
 }
 
 export function tokenBreakdownMetrics(usage: TokenUsageBreakdown) {
@@ -192,8 +185,6 @@ function SubagentScopeBar({
   );
 }
 
-export { formatDuration, formatTokenCount } from "../formatters";
-
 export function DetailPanel({
   error,
   isLoading = false,
@@ -210,12 +201,15 @@ export function DetailPanel({
   const scopedTurn = subagentFrame?.thread.turns.find((item) => item.id === subagentFrame.turnId)
     ?? (subagentFrame ? defaultSubagentTurn(subagentFrame.thread) : undefined);
   const displayTurn = subagentFrame ? scopedTurn : turn;
+  const displayContext = displayTurn && "context" in displayTurn ? displayTurn.context : undefined;
   const thirdTab = subagentFrame ? "events" : "json";
   const raw = useMemo(() => displayTurn ? JSON.stringify(displayTurn, null, 2) : "", [displayTurn]);
   const panelId = tab === "sequence" ? "turn-sequence-panel"
-      : tab === "events" ? "turn-events-panel" : "turn-json-panel";
+      : tab === "context" ? "turn-context-panel"
+        : tab === "events" ? "turn-events-panel" : "turn-json-panel";
   const panelLabelId = tab === "sequence" ? "turn-sequence-tab"
-      : tab === "events" ? "turn-events-tab" : "turn-json-tab";
+      : tab === "context" ? "turn-context-tab"
+        : tab === "events" ? "turn-events-tab" : "turn-json-tab";
   const awaitingRunDetail = Boolean(
     isLoading && !subagentFrame && displayTurn && displayTurn.items.length === 0,
   );
@@ -236,26 +230,23 @@ export function DetailPanel({
   const openSubagent = (
     thread: ThreadDetail,
     sourceEventId: string,
-    sourceView: SubagentDetailView,
   ) => {
     const defaultTurn = defaultSubagentTurn(thread);
     if (!defaultTurn) return;
-    const navigation = subagentNavigation(sourceView, sourceEventId);
     setSubagentStack((current) => [...current, {
-      returnTab: navigation.tab,
-      sourceSelectionId: navigation.sourceSelectionId,
+      sourceSelectionId: `seq-${sourceEventId}`,
       thread,
       turnId: defaultTurn.id,
     }]);
     setRestoredSelectionId(undefined);
-    setTab(navigation.tab);
+    setTab("sequence");
   };
 
   const closeSubagent = () => {
     if (!subagentFrame) return;
     setSubagentStack((current) => current.slice(0, -1));
     setRestoredSelectionId(subagentFrame.sourceSelectionId);
-    setTab(subagentFrame.returnTab);
+    setTab("sequence");
   };
 
   const selectSubagentTurn = (turnId: string) => {
@@ -279,6 +270,19 @@ export function DetailPanel({
           type="button"
         >
           Trace
+        </button>
+        <button
+          aria-controls="turn-context-panel"
+          aria-selected={tab === "context"}
+          className={tab === "context" ? "vbg-custom-is-active" : ""}
+          id="turn-context-tab"
+          onKeyDown={handleRovingTabKey}
+          onClick={() => setTab("context")}
+          role="tab"
+          tabIndex={tab === "context" ? 0 : -1}
+          type="button"
+        >
+          Context
         </button>
         <button
           aria-controls={`turn-${thirdTab}-panel`}
@@ -388,13 +392,20 @@ export function DetailPanel({
                     />
                   </Suspense>
                 )
+              ) : tab === "context" ? (
+                awaitingRunDetail ? (
+                  <LoadingState
+                    description="Fetching this run’s recorded context."
+                    label="Loading run context…"
+                  />
+                ) : <ContextDetails context={displayContext} />
               ) : (
                 <div className="vbg-custom-subagent-events-view">
                   {scopedTurn && (
                     <SubagentEventList
                       items={scopedTurn.items}
                       renderEventDetails={(event) => (
-                        <EventDetails event={event} fallback={event.summary} onOpenSubagent={openSubagent} subagentView="sequence" />
+                        <EventDetails event={event} fallback={event.summary} onOpenSubagent={openSubagent} />
                       )}
                     />
                   )}

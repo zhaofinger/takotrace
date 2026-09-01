@@ -81,12 +81,17 @@ describe('TakoTraceServer', () => {
     const largeRaw = 'sse payload'.repeat(10_000);
     server.store.add({
       method: 'item/started', type: 'command', status: 'running', threadId: 't', turnId: 'u', itemId: 'i', summary: 'run',
+      context: {
+        source: 'claude-live', session: { marker: 'private-context-marker' }, worldState: {}, turn: {},
+      },
       raw: { result: largeRaw },
     });
     const chunk = await reader.read();
     const eventText = new TextDecoder().decode(chunk.value);
     expect(eventText).toContain('data: {');
     expect(eventText).not.toContain('"raw"');
+    expect(eventText).not.toContain('"context"');
+    expect(eventText).not.toContain('private-context-marker');
     expect(eventText).not.toContain(largeRaw);
     server.store.setConnection('connected');
     const snapshotChunk = await reader.read();
@@ -94,6 +99,7 @@ describe('TakoTraceServer', () => {
     expect(snapshotText).toContain('"kind":"snapshot"');
     expect(snapshotText).toContain('"events":[]');
     expect(snapshotText).not.toContain('"raw"');
+    expect(snapshotText).not.toContain('private-context-marker');
     await reader.cancel();
   });
 

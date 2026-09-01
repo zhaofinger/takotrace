@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { formatClockTime, formatDateTime, formatExactNumber, formatPercentage, formatTokenCount } from "../formatters";
+import { formatClockTime, formatDateTime, formatExactNumber, formatPercentage } from "../formatters";
 import { eventRaw, normalizedEventType } from "../trace-event";
 import type { CompactTraceEvent, CompactTurn, Thread, Turn } from "../types";
 import { asRecord, nonEmptyText } from "../value-utils";
@@ -18,8 +18,6 @@ interface SessionTooltipState {
   left: number;
   top: number;
 }
-
-export { formatTokenCount } from "../formatters";
 
 function rawItemText(item: DisplayTraceEvent): string | undefined {
   const raw = eventRaw(item);

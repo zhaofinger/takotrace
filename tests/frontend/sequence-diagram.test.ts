@@ -285,7 +285,6 @@ describe("SequenceDiagram Component", () => {
         event: subagentEvent,
       },
       onClose: () => undefined,
-      subagentView: "sequence",
     }));
 
     expect(markup).toContain('aria-label="Execution timing"');

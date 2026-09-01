@@ -77,6 +77,7 @@ export class TraceStore {
       durationMs: turn.durationMs,
       model: turn.model,
       tokenUsage: turn.tokenUsage,
+      context: turn.context ? sanitizeContext(turn.context) : undefined,
       items: turn.items.map((item) => ({ ...item, raw: sanitizeRaw(item.raw) })),
     };
   }
@@ -146,6 +147,7 @@ export class TraceStore {
     if (event.tokenUsage) thread.tokenUsage = event.tokenUsage;
     if (!event.turnId) return;
     const turn = this.getOrCreateTurn(thread, event);
+    if (event.context) turn.context = event.context;
     turn.model = event.model ?? turn.model ?? this.currentModelByThread.get(event.threadId);
     if (event.tokenUsage) {
       turn.tokenUsage = addTokenUsage(
@@ -205,6 +207,7 @@ export class TraceStore {
         turn.completedAt = historicalTurn.completedAt ?? turn.completedAt;
         turn.durationMs = historicalTurn.durationMs ?? turn.durationMs;
         turn.model = historicalTurn.model ?? turn.model;
+        turn.context = historicalTurn.context ?? turn.context;
         if (!turn.tokenUsage || (historicalTurn.tokenUsage?.totalTokens ?? -1) >= turn.tokenUsage.totalTokens) {
           turn.tokenUsage = historicalTurn.tokenUsage ?? turn.tokenUsage;
         }
@@ -348,11 +351,56 @@ export function sanitizeRaw(value: unknown, seen = new WeakSet<object>()): unkno
   return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, sanitizeRaw(entry, seen)]));
 }
 
+const CONTEXT_STRING_LIMIT = 32 * 1_024;
+const CONTEXT_DEPTH_LIMIT = 16;
+const CONTEXT_ENTRY_LIMIT = 5_000;
+const CONTEXT_COLLECTION_LIMIT = 500;
+const ENCRYPTED_CONTEXT_KEYS = new Set(['encrypted_content', 'encryptedContent']);
+
+export function sanitizeContext<T>(value: T): T {
+  const state = { entries: 0, seen: new WeakSet<object>() };
+  return sanitizeContextValue(value, state, 0) as T;
+}
+
+function sanitizeContextValue(
+  value: unknown,
+  state: { entries: number; seen: WeakSet<object> },
+  depth: number,
+): unknown {
+  if (state.entries >= CONTEXT_ENTRY_LIMIT) return '[context entry limit reached]';
+  state.entries += 1;
+  if (typeof value === 'string') {
+    return value.length <= CONTEXT_STRING_LIMIT
+      ? value
+      : `${value.slice(0, CONTEXT_STRING_LIMIT)}\n[truncated ${value.length - CONTEXT_STRING_LIMIT} chars]`;
+  }
+  if (!value || typeof value !== 'object') return value;
+  if (depth >= CONTEXT_DEPTH_LIMIT) return '[context depth limit reached]';
+  if (state.seen.has(value)) return '[truncated circular reference]';
+  state.seen.add(value);
+  if (Array.isArray(value)) {
+    const items = value.slice(0, CONTEXT_COLLECTION_LIMIT)
+      .map((entry) => sanitizeContextValue(entry, state, depth + 1));
+    if (value.length > CONTEXT_COLLECTION_LIMIT) items.push(`[truncated ${value.length - CONTEXT_COLLECTION_LIMIT} items]`);
+    return items;
+  }
+  const entries = Object.entries(value);
+  const safe = Object.fromEntries(entries.slice(0, CONTEXT_COLLECTION_LIMIT).map(([key, entry]) => [
+    key,
+    ENCRYPTED_CONTEXT_KEYS.has(key)
+      ? '[encrypted content unavailable]'
+      : sanitizeContextValue(entry, state, depth + 1),
+  ]));
+  if (entries.length > CONTEXT_COLLECTION_LIMIT) safe.__truncated__ = `${entries.length - CONTEXT_COLLECTION_LIMIT} properties omitted`;
+  return safe;
+}
+
 export function publicHistoricalThread(thread: HistoricalThread): HistoricalThread {
   const bounded: HistoricalThread = {
     ...thread,
     turns: thread.turns.slice(-DEFAULT_LIMITS.turnsPerThread).map((turn) => ({
       ...turn,
+      context: turn.context ? sanitizeContext(turn.context) : undefined,
       items: turn.items.slice(-DEFAULT_LIMITS.itemsPerTurn),
     })),
   };

@@ -10,7 +10,7 @@ import {
   type SDKSessionInfo,
   type SessionMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-import type { ThreadTokenUsage, TokenUsageBreakdown } from '../shared/types.js';
+import type { ThreadTokenUsage, TokenUsageBreakdown, TurnContextSnapshot } from '../shared/types.js';
 import type { TraceInput, TraceProvider } from './provider.js';
 
 export interface ClaudeSdk {
@@ -127,7 +127,7 @@ export class ClaudeClient implements TraceProvider {
     this.emitter.emit('history', histories, true, 'claude');
   }
 
-  startThread(params: Record<string, unknown> = {}): Promise<unknown> {
+  startThread(_params: Record<string, unknown> = {}): Promise<unknown> {
     const threadId = this.pendingThreadId && !this.sessionByThread.has(this.pendingThreadId)
       ? this.pendingThreadId
       : randomUUID();
@@ -156,7 +156,7 @@ export class ClaudeClient implements TraceProvider {
     };
   }
 
-  async startTurn(threadId: string, text: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  async startTurn(threadId: string, text: string, _params: Record<string, unknown> = {}): Promise<unknown> {
     if (this.busy) {
       throw Object.assign(new Error('A Claude turn is already running'), { statusCode: 409 });
     }
@@ -182,6 +182,7 @@ export class ClaudeClient implements TraceProvider {
       let emittedThreadStarted = false;
       let emittedTurnStarted = false;
       let resultReceived = false;
+      let liveContext: TurnContextSnapshot | undefined;
       const activeTools = new Map<string, Record<string, unknown>>();
       for await (const message of live) {
         if (message.type === 'system' && message.subtype === 'init') {
@@ -193,12 +194,22 @@ export class ClaudeClient implements TraceProvider {
             provider: 'claude', raw: message,
           });
           emittedThreadStarted = true;
+          let contextUsage: unknown;
+          if (typeof live.getContextUsage === 'function') {
+            try {
+              contextUsage = await live.getContextUsage();
+            } catch {
+              // Context usage is optional and must not make an otherwise valid turn fail.
+            }
+          }
+          liveContext = claudeContext(undefined, message, undefined, contextUsage, 'claude-live');
           if (!emittedTurnStarted) {
             this.emitTrace({
               method: 'turn/started', type: 'turn', status: 'running', threadId, turnId, at: nowIso(),
               summary: 'Claude turn started',
               model: messageModel(message),
-              provider: 'claude', raw: { type: 'turn', subtype: 'started', thread_id: threadId, turn_id: turnId },
+              provider: 'claude', context: liveContext,
+              raw: { type: 'turn', subtype: 'started', thread_id: threadId, turn_id: turnId },
             });
             emittedTurnStarted = true;
           }
@@ -242,7 +253,7 @@ export class ClaudeClient implements TraceProvider {
             emittedTurnStarted = true;
           }
           resultReceived = true;
-          this.emitResult(threadId, turnId, message, startAt);
+          this.emitResult(threadId, turnId, message, startAt, liveContext);
           continue;
         }
       }
@@ -326,7 +337,13 @@ export class ClaudeClient implements TraceProvider {
     }
   }
 
-  private emitResult(threadId: string, turnId: string, message: LiveResult, startAt: number): void {
+  private emitResult(
+    threadId: string,
+    turnId: string,
+    message: LiveResult,
+    startAt: number,
+    context?: TurnContextSnapshot,
+  ): void {
     const success = message.subtype === 'success';
     const result = typeof message.result === 'string' ? message.result : '';
     const durationMs = typeof message.duration_ms === 'number' ? message.duration_ms : Date.now() - startAt;
@@ -334,6 +351,7 @@ export class ClaudeClient implements TraceProvider {
     this.emitTrace({
       method: 'turn/completed', type: 'turn', status: success ? 'completed' : 'failed', threadId, turnId,
       durationMs, model: modelFromUsage(message.modelUsage), tokenUsage: usage, at: nowIso(), provider: 'claude',
+      context,
       summary: result.length > 160 ? `${result.slice(0, 157)}...` : result || 'Claude turn completed',
       raw: message,
     });
@@ -358,28 +376,57 @@ export function sessionToHistory(session: SDKSessionInfo, messages: SessionMessa
     historySource: 'claude',
     provider: 'claude',
     modelProvider: 'claude',
-    turns: messagesToTurns(session.sessionId, messages),
+    turns: messagesToTurns(session.sessionId, messages, session),
   };
 }
 
 export function messagesToTurns(
   sessionId: string,
   messages: SessionMessage[],
+  session?: SDKSessionInfo,
 ): Array<Record<string, unknown>> {
-  const turns: Array<{ id: string; status: string; model?: string; items: Array<Record<string, unknown>> }> = [];
+  const turns: Array<{
+    id: string;
+    status: string;
+    model?: string;
+    context?: TurnContextSnapshot;
+    items: Array<Record<string, unknown>>;
+  }> = [];
   let current: (typeof turns)[number] | undefined;
+  let latestInit: Record<string, unknown> | undefined;
+  let latestCompact: Record<string, unknown> | undefined;
   for (const message of messages) {
-    if (message.type === 'system') continue;
+    if (message.type === 'system') {
+      const system = systemMessageRecord(message);
+      if (system.subtype === 'init') latestInit = system;
+      if (system.subtype === 'compact_boundary') {
+        latestCompact = record(system.compact_metadata);
+        if (current) current.context = claudeContext(session, latestInit, latestCompact);
+      }
+      continue;
+    }
     const blocks = messageBlocks(message);
     if (message.type === 'user') {
       const answersToolUse = message.parent_tool_use_id !== null
         || blocks.some((block) => block.type === 'tool_result');
       if (!answersToolUse) {
-        current = { id: message.uuid, status: 'completed', items: [] };
+        current = {
+          id: message.uuid,
+          status: 'completed',
+          context: claudeContext(session, latestInit, latestCompact),
+          items: [],
+        };
         turns.push(current);
+        latestCompact = undefined;
       } else if (!current) {
-        current = { id: `${sessionId}:turn-${message.uuid}`, status: 'completed', items: [] };
+        current = {
+          id: `${sessionId}:turn-${message.uuid}`,
+          status: 'completed',
+          context: claudeContext(session, latestInit, latestCompact),
+          items: [],
+        };
         turns.push(current);
+        latestCompact = undefined;
       }
       for (const [index, block] of blocks.entries()) {
         const item = userBlockItem(message, block, index);
@@ -388,16 +435,74 @@ export function messagesToTurns(
       continue;
     }
     if (!current) {
-      current = { id: `${sessionId}:turn-${message.uuid}`, status: 'completed', items: [] };
+      current = {
+        id: `${sessionId}:turn-${message.uuid}`,
+        status: 'completed',
+        context: claudeContext(session, latestInit, latestCompact),
+        items: [],
+      };
       turns.push(current);
+      latestCompact = undefined;
     }
     current.model = messageModel(message) ?? current.model;
+    if (current.model && current.context) {
+      current.context.session.model = current.model;
+    }
     for (const [index, block] of blocks.entries()) {
       const item = assistantBlockItem(message, block, index);
       if (item) current.items.push(item);
     }
   }
   return turns;
+}
+
+function systemMessageRecord(message: SessionMessage): Record<string, unknown> {
+  const outer = record(message);
+  return { ...record(outer.message), ...outer };
+}
+
+function claudeContext(
+  session?: SDKSessionInfo,
+  initValue?: unknown,
+  compactMetadata?: Record<string, unknown>,
+  contextUsage?: unknown,
+  source: TurnContextSnapshot['source'] = 'claude-history',
+): TurnContextSnapshot {
+  const init = record(initValue);
+  return {
+    source,
+    session: definedRecord({
+      cwd: init.cwd ?? session?.cwd,
+      git_branch: session?.gitBranch,
+      tag: session?.tag,
+      created_at: session?.createdAt,
+      last_modified: session?.lastModified,
+      file_size: session?.fileSize,
+      claude_code_version: init.claude_code_version,
+      model: init.model,
+    }),
+    worldState: definedRecord({
+      permission_mode: init.permissionMode ?? init.permission_mode,
+      tools: init.tools,
+      mcp_servers: init.mcp_servers,
+      skills: init.skills,
+      plugins: init.plugins,
+      agents: init.agents,
+      slash_commands: init.slash_commands,
+      terminal_slash_commands: init.terminal_slash_commands,
+      output_style: init.output_style,
+      effort: init.effort,
+      capabilities: init.capabilities,
+    }),
+    turn: definedRecord({
+      compact_boundary: compactMetadata,
+      context_usage: contextUsage,
+    }),
+  };
+}
+
+function definedRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
 function messageModel(value: unknown): string | undefined {

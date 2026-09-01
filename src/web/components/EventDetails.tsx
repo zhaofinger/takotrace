@@ -11,22 +11,14 @@ import { SubagentThreadDetails } from "./SubagentThreadDetails";
 type DetailEvent = CompactTraceEvent | TraceEvent;
 type RecordValue = UnknownRecord;
 
-export type SubagentDetailView = "trace" | "sequence";
 export type OpenSubagentHandler = (
   thread: ThreadDetail,
   sourceEventId: string,
-  sourceView: SubagentDetailView,
 ) => void;
-
-export { eventRaw } from "../trace-event";
 
 function preview(value: string, maximum = 4_000): string {
   if (value.length <= maximum) return value;
   return `${value.slice(0, maximum)}\n…`;
-}
-
-function lineCount(value: string): number {
-  return value ? value.split("\n").length : 0;
 }
 
 function json(value: unknown): string {
@@ -190,13 +182,11 @@ function WebSearchDetails({ raw }: { raw: RecordValue }) {
 
 function SubagentDetails({
   autoLoad,
-  detailView,
   event,
   raw,
   onOpenSubagent,
 }: {
   autoLoad: boolean;
-  detailView: SubagentDetailView;
   event: DetailEvent;
   raw: RecordValue;
   onOpenSubagent?: OpenSubagentHandler;
@@ -205,9 +195,8 @@ function SubagentDetails({
     <div className="vbg-custom-event-detail">
       <SubagentThreadDetails
         autoLoad={autoLoad}
-        detailView={detailView}
         fallbackInput={text(raw.prompt)}
-        onOpenThread={(thread) => onOpenSubagent?.(thread, traceEventId(event), detailView)}
+        onOpenThread={(thread) => onOpenSubagent?.(thread, traceEventId(event))}
         raw={raw}
       />
     </div>
@@ -246,14 +235,12 @@ export function EventDetails({
   expandResult = false,
   fallback,
   onOpenSubagent,
-  subagentView = "trace",
 }: {
   autoLoadSubagent?: boolean;
   event: DetailEvent;
   expandResult?: boolean;
   fallback: string;
   onOpenSubagent?: OpenSubagentHandler;
-  subagentView?: SubagentDetailView;
 }) {
   const raw = eventRaw(event);
   const type = normalizedEventType(event);
@@ -267,7 +254,6 @@ export function EventDetails({
     return (
       <SubagentDetails
         autoLoad={autoLoadSubagent}
-        detailView={subagentView}
         event={event}
         onOpenSubagent={onOpenSubagent}
         raw={raw}

@@ -49,13 +49,6 @@ export function formatClockTime(value: string): string {
     : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
 
-export function formatClockTimeWithMilliseconds(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : `${date.toLocaleTimeString([], { hour12: false })}.${String(date.getMilliseconds()).padStart(3, "0")}`;
-}
-
 export function formatDateTimeWithMilliseconds(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;

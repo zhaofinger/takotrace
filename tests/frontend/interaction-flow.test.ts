@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flowKindIconName, flowLane, flowNode, mergeFlowEvents } from "../../src/web/components/InteractionFlow.js";
+import { flowKindIconName, flowNode, mergeFlowEvents } from "../../src/web/components/InteractionFlow.js";
 import type { TraceEvent } from "../../src/web/types.js";
 
 describe("interaction flow", () => {
@@ -123,18 +123,6 @@ describe("interaction flow", () => {
       label: "Skill",
       title: "Skill load · react-best-practices +1 (inferred)",
     });
-    expect(flowLane(node.kind)).toBe("tool");
-  });
-
-  it("places interaction types in stable Trace overview lanes", () => {
-    expect(flowLane("user")).toBe("user");
-    expect(flowLane("agent")).toBe("agent");
-    expect(flowLane("reasoning")).toBe("agent");
-    expect(flowLane("skill")).toBe("tool");
-    expect(flowLane("mcp")).toBe("tool");
-    expect(flowLane("tool")).toBe("tool");
-    expect(flowLane("file")).toBe("tool");
-    expect(flowLane("subagent")).toBe("subagent");
   });
 
   it("uses the same role icons across replay, flow, and sequence views", () => {

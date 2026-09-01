@@ -9,7 +9,6 @@ import { formatDuration } from "../formatters";
 import type { SubagentAssignment, ThreadDetail, TraceEvent } from "../types";
 import { eventRaw, normalizedEventType } from "../trace-event";
 import { nonEmptyText as text, type UnknownRecord } from "../value-utils";
-import type { SubagentDetailView } from "./EventDetails";
 import { MarkdownContent } from "./MarkdownContent";
 import { LoadingState } from "./LoadingState";
 import { StatusMark } from "./StatusMark";
@@ -130,13 +129,11 @@ export function subagentThreadOverview(thread: ThreadDetail): {
 
 export function SubagentThreadContent({
   assignment,
-  detailView = "trace",
   fallbackInput,
   thread,
   onOpenThread,
 }: {
   assignment?: SubagentAssignment;
-  detailView?: SubagentDetailView;
   fallbackInput?: string;
   thread: ThreadDetail;
   onOpenThread?: (thread: ThreadDetail) => void;
@@ -170,7 +167,7 @@ export function SubagentThreadContent({
           <div className="vbg-custom-subagent-thread__actions">
             <StatusMark status={displayStatus} />
             {onOpenThread && thread.turns.length > 0 && (
-              <button onClick={() => onOpenThread(thread)} type="button">Open {detailView}</button>
+              <button onClick={() => onOpenThread(thread)} type="button">Open sequence</button>
             )}
           </div>
         </header>
@@ -251,13 +248,11 @@ function SubagentEventBody({
 
 function TargetThread({
   autoLoad,
-  detailView,
   fallbackInput,
   threadId,
   onOpenThread,
 }: {
   autoLoad: boolean;
-  detailView: SubagentDetailView;
   fallbackInput?: string;
   threadId: string;
   onOpenThread?: (thread: ThreadDetail) => void;
@@ -302,7 +297,6 @@ function TargetThread({
   return (
     <SubagentThreadContent
       assignment={snapshot.assignment}
-      detailView={detailView}
       fallbackInput={fallbackInput}
       onOpenThread={onOpenThread}
       thread={snapshot.thread}
@@ -312,13 +306,11 @@ function TargetThread({
 
 export function SubagentThreadDetails({
   autoLoad = false,
-  detailView = "trace",
   fallbackInput,
   raw,
   onOpenThread,
 }: {
   autoLoad?: boolean;
-  detailView?: SubagentDetailView;
   fallbackInput?: string;
   raw: RecordValue;
   onOpenThread?: (thread: ThreadDetail) => void;
@@ -330,7 +322,6 @@ export function SubagentThreadDetails({
       {threadIds.map((threadId) => (
         <TargetThread
           autoLoad={autoLoad}
-          detailView={detailView}
           fallbackInput={fallbackInput}
           key={threadId}
           onOpenThread={onOpenThread}

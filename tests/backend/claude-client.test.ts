@@ -45,9 +45,17 @@ describe('ClaudeClient history mapping', () => {
       updatedAt: '2026-01-01T00:00:03.000Z',
       cwd: '/tmp/project',
     });
-    const turns = (snapshots[0].threads[0] as { turns: Array<{ items: Array<Record<string, unknown>> }> }).turns;
+    const turns = (snapshots[0].threads[0] as {
+      turns: Array<{ context?: Record<string, unknown>; items: Array<Record<string, unknown>> }>;
+    }).turns;
     expect(turns).toHaveLength(1);
     expect(turns[0]).toMatchObject({ model: 'claude-sonnet-4-6' });
+    expect(turns[0].context).toMatchObject({
+      source: 'claude-history',
+      session: { cwd: '/tmp/project', model: 'claude-sonnet-4-6' },
+      worldState: {},
+      turn: {},
+    });
     const items = turns[0].items;
     expect(items.map((item) => item.type)).toEqual([
       'userMessage', 'reasoning', 'agentMessage', 'tool', 'toolResult', 'agentMessage',
@@ -117,7 +125,12 @@ describe('ClaudeClient history mapping', () => {
         output_tokens_details: { thinking_tokens: 3 },
       }),
     );
-    const sdk = fakeSdk([], [], undefined, stream);
+    const sdk = fakeSdk([], [], undefined, stream, {
+      totalTokens: 12_000,
+      maxTokens: 200_000,
+      percentage: 6,
+      skills: [{ name: 'frontend-testing' }],
+    });
     const client = new ClaudeClient({ sdk });
     await client.start();
     const events: Array<Record<string, unknown>> = [];
@@ -157,6 +170,16 @@ describe('ClaudeClient history mapping', () => {
       'turn/completed',
     ]);
     expect(events[2]).toMatchObject({ type: 'userMessage', summary: 'Fix the login bug' });
+    expect(events[1].context).toMatchObject({
+      source: 'claude-live',
+      session: { cwd: '/tmp/project', claude_code_version: '2.1.0', model: 'claude-sonnet-4-6' },
+      worldState: {
+        permission_mode: 'default',
+        tools: ['Read', 'Edit'],
+        skills: ['frontend-testing'],
+      },
+      turn: { context_usage: { totalTokens: 12_000, maxTokens: 200_000, percentage: 6 } },
+    });
     expect(events[3]).toMatchObject({ type: 'agentMessage', status: 'completed', model: 'claude-sonnet-4-6' });
     expect(events[4]).toMatchObject({ type: 'tool', status: 'running', itemId: 'tool-1' });
     expect(events[4].raw as Record<string, unknown>).toMatchObject({ name: 'Edit', input: { file: 'a.ts' } });
@@ -207,10 +230,16 @@ describe('ClaudeClient history mapping', () => {
   });
 
   it('maps error results to a failed turn and reports query failures', async () => {
-    const sdk = fakeSdk([], [], undefined, streamOf(
-      initMessage('real-1'),
-      resultMessage('real-1', 'error_during_execution', undefined, 'Permission required'),
-    ));
+    const sdk = fakeSdk(
+      [],
+      [],
+      undefined,
+      streamOf(
+        initMessage('real-1'),
+        resultMessage('real-1', 'error_during_execution', undefined, 'Permission required'),
+      ),
+      new Error('context usage unsupported'),
+    );
     const client = new ClaudeClient({ sdk });
     await client.start();
     const events: Array<Record<string, unknown>> = [];
@@ -258,12 +287,18 @@ function fakeSdk(
   messages: SessionMessage[],
   info: SDKSessionInfo | undefined,
   queryStream?: AsyncGenerator<SDKMessage, void>,
+  contextUsage?: unknown,
 ): ClaudeSdk {
   return {
     listSessions: vi.fn(async () => sessions),
     getSessionMessages: vi.fn(async () => messages),
     getSessionInfo: vi.fn(async () => info),
-    query: vi.fn((_params) => (queryStream ?? emptyStream()) as unknown as Query),
+    query: vi.fn((_params) => Object.assign(queryStream ?? emptyStream(), {
+      getContextUsage: vi.fn(async () => {
+        if (contextUsage instanceof Error) throw contextUsage;
+        return contextUsage;
+      }),
+    }) as unknown as Query),
   };
 }
 
@@ -296,7 +331,18 @@ function sdkMessage(value: Record<string, unknown>): SDKMessage {
 }
 
 function initMessage(sessionId: string): Record<string, unknown> {
-  return { type: 'system', subtype: 'init', session_id: sessionId, uuid: 'init-1' };
+  return {
+    type: 'system',
+    subtype: 'init',
+    session_id: sessionId,
+    uuid: 'init-1',
+    cwd: '/tmp/project',
+    claude_code_version: '2.1.0',
+    model: 'claude-sonnet-4-6',
+    permissionMode: 'default',
+    tools: ['Read', 'Edit'],
+    skills: ['frontend-testing'],
+  };
 }
 
 function userMessage(

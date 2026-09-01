@@ -48,9 +48,11 @@ npx takotrace --port 4400 --no-open
 ## 可以查看什么
 
 - 按 Provider 和工作目录分组的 Session。
-- 每个 Run 的 Trace、Sequence 和 Raw JSON。
+- 每个 Run 的 Trace、Context 和 Raw JSON。
 - 命令、文件修改、MCP 调用、Skill 与 Subagent 关系。
 - Token 用量、Markdown、附件、图片和本地源文件。
+- 从本地 rollout 文件读取的 Codex 指令、工作区、权限、运行时和上下文压缩信息。
+- Claude 本地历史中的会话元数据，以及托管实时 Run 的权限、工具、MCP Server、Skill、Plugin 和上下文用量。
 - Codex App Server 解码失败时，从本地 rollout 文件只读恢复历史。
 
 界面使用 **Session**、**Run**、**Step**，Raw API 保留 Provider 的原始字段名。

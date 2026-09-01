@@ -230,7 +230,7 @@ export class TakoTraceServer {
     });
     response.write(': connected\n\n');
     const listener = (event: TraceEvent) => {
-      const { raw: _raw, ...compact } = event;
+      const { raw: _raw, context: _context, ...compact } = event;
       response.write(`id: ${event.seq}\ndata: ${JSON.stringify(compact)}\n\n`);
     };
     const unsubscribe = this.store.subscribe(listener);

@@ -154,6 +154,28 @@ describe('TraceStore', () => {
       itemCount: 1,
       items: [],
     });
+    expect(store.publicSnapshot().threads[0].turns[0]).not.toHaveProperty('context');
+  });
+
+  it('returns sanitized context only from run detail', () => {
+    const store = new TraceStore();
+    const thread = historyThread();
+    (thread.turns[0] as Record<string, unknown>).context = {
+      source: 'rollout-file',
+      session: { base_instructions: 'Local rules' },
+      worldState: { reasoning: { encrypted_content: 'ciphertext' } },
+      turn: { cwd: '/tmp/project' },
+    };
+
+    store.synchronizeThreads([thread]);
+
+    expect(store.publicSnapshot().threads[0].turns[0]).not.toHaveProperty('context');
+    expect(store.getTurn('history-1', 'turn-1')?.context).toEqual({
+      source: 'rollout-file',
+      session: { base_instructions: 'Local rules' },
+      worldState: { reasoning: { encrypted_content: '[encrypted content unavailable]' } },
+      turn: { cwd: '/tmp/project' },
+    });
   });
 
   it('attributes realtime cumulative token deltas once and falls back to last usage after a reset', () => {

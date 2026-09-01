@@ -425,7 +425,6 @@ export function SequenceDiagram({
               item={sequenceInspectorItem(selectedStep, participantLabels)}
               onClose={closeInspector}
               onOpenSubagent={onOpenSubagent}
-              subagentView="sequence"
             />
           )}
         </div>

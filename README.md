@@ -48,9 +48,11 @@ Run `npx takotrace --help` for every CLI option.
 ## What you can inspect
 
 - Sessions grouped by provider and working directory.
-- Each run as a Trace, Sequence diagram, or Raw JSON.
+- Each run as a Trace, recorded Context, or Raw JSON.
 - Commands, file changes, MCP calls, skills, and subagent relationships.
 - Token usage, Markdown, attachments, images, and local source files.
+- Codex instructions, workspace, permissions, runtime, and compaction context captured from local rollout files.
+- Claude session metadata from local history, plus permissions, tools, MCP servers, skills, plugins, and context usage for managed live runs.
 - Codex history recovered read-only from local rollout files when App Server decoding fails.
 
 TakoTrace uses **Session**, **Run**, and **Step** in the UI. Raw APIs keep the original provider field names.

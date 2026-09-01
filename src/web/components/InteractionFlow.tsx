@@ -1,27 +1,13 @@
-import { useMemo } from "react";
 import type { CompactTraceEvent, TraceEvent } from "../types";
-import { formatClockTimeWithMilliseconds } from "../formatters";
 import { eventRaw, timestampMs } from "../trace-event";
 import { asRecord as record, nonEmptyText as text, normalizedToken } from "../value-utils";
-import { EventDetails } from "./EventDetails";
-import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
 import { commandText, workingDirectoryText } from "./command-display";
 import { nodeReplExecution } from "./mcp-execution";
 import { inferredSkillLoad } from "./skill-display";
-import { StatusMark } from "./StatusMark";
 
 export type FlowEvent = CompactTraceEvent | TraceEvent;
 export type FlowKind = "user" | "agent" | "reasoning" | "skill" | "mcp" | "tool" | "subagent" | "file" | "web" | "system";
-type FlowLane = "user" | "agent" | "tool" | "subagent";
-
-const FLOW_LANES: Array<{ key: FlowLane; label: string }> = [
-  { key: "user", label: "Input" },
-  { key: "agent", label: "Agent" },
-  { key: "tool", label: "Tools" },
-  { key: "subagent", label: "Subagents" },
-];
-
 export interface FlowNode {
   kind: FlowKind;
   label: string;
@@ -272,55 +258,4 @@ export function flowKindIconName(kind: FlowKind): IconName {
   if (kind === "web") return "web";
   if (kind === "tool") return "tool";
   return "activity";
-}
-
-export function flowLane(kind: FlowKind): FlowLane {
-  if (kind === "user") return "user";
-  if (kind === "agent" || kind === "reasoning") return "agent";
-  if (kind === "subagent") return "subagent";
-  return "tool";
-}
-
-export function InteractionFlow({ items }: { items: FlowEvent[] }) {
-  const nodes = useMemo(
-    () => mergeFlowEvents(items).map((event) => {
-      const node = flowNode(event);
-      return { event, node };
-    }),
-    [items],
-  );
-
-  return (
-    <section aria-label="Interaction flow" className="vbg-custom-flow">
-      <div className="vbg-custom-flow__heading">
-        <h3>Structured events</h3>
-        <span>{nodes.length} events</span>
-      </div>
-      <ol className="vbg-custom-flow__list">
-        {nodes.map(({ event, node }, index) => (
-          <li
-            aria-label={`${node.label}: ${node.title}`}
-            className={`vbg-custom-flow-node vbg-custom-flow-node--${node.kind}`}
-            key={event.seq}
-          >
-            <div className="vbg-custom-flow-node__rail"><span><Icon name={flowKindIconName(node.kind)} /></span></div>
-            <article>
-              <header>
-                <span className="vbg-custom-flow-node__step">{index + 1}</span>
-                <span className="vbg-custom-flow-node__label">{node.label}</span>
-                <strong>{node.title}</strong>
-                <time dateTime={event.at}>{formatClockTimeWithMilliseconds(event.at)}</time>
-              </header>
-              <EventDetails event={event} fallback={node.detail} />
-              <footer>
-                {node.meta && <code>{node.meta}</code>}
-                {node.showStatus && <StatusMark status={node.statusLabel ?? event.status} />}
-                {event.durationMs !== undefined && <span>{event.durationMs}ms</span>}
-              </footer>
-            </article>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
 }

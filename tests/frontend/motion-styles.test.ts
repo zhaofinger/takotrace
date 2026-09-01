@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const styles = readFileSync(new URL("../../src/web/styles.css", import.meta.url), "utf8");
-const executionReplay = readFileSync(new URL("../../src/web/components/ExecutionReplay.tsx", import.meta.url), "utf8");
 const executionInspector = readFileSync(new URL("../../src/web/components/ExecutionInspector.tsx", import.meta.url), "utf8");
 const sequenceDiagram = readFileSync(new URL("../../src/web/components/SequenceDiagram.tsx", import.meta.url), "utf8");
 
@@ -27,11 +26,8 @@ describe("motion styles", () => {
     expect(styles).not.toContain("scale(0)");
   });
 
-  it("replays the shared inspector entrance when either selection changes", () => {
-    expect(executionReplay).toMatch(/<ExecutionInspector\s+key=\{selectedAction\.id\}/);
+  it("replays the shared inspector entrance when the sequence selection changes", () => {
     expect(sequenceDiagram).toMatch(/<ExecutionInspector\s+key=\{selectedStep\.id\}/);
-    expect(executionReplay).toContain('subagentView="trace"');
-    expect(sequenceDiagram).toContain('subagentView="sequence"');
     expect(executionInspector).toContain('const isSubagent = kind === "subagent"');
     expect(executionInspector).toContain("{!isSubagent && (");
     expect(executionInspector).toContain("vbg-custom-sequence__inspector-summary--subagent");

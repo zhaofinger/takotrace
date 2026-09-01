@@ -3,7 +3,7 @@ import { formatClockTime, formatDateTimeWithMilliseconds } from "../formatters";
 import { handleRovingTabKey } from "../roving-tabs";
 import { eventRaw } from "../trace-event";
 import type { TraceStatus } from "../types";
-import { EventDetails, type OpenSubagentHandler, type SubagentDetailView } from "./EventDetails";
+import { EventDetails, type OpenSubagentHandler } from "./EventDetails";
 import { ExecutionMetaSummary } from "./ExecutionMetaSummary";
 import { HighlightedCode } from "./HighlightedCode";
 import { flowNode, type FlowEvent, type FlowKind } from "./InteractionFlow";
@@ -51,13 +51,11 @@ export function ExecutionInspector({
   item,
   onClose,
   onOpenSubagent,
-  subagentView = "trace",
 }: {
   autoFocusClose?: boolean;
   item: ExecutionInspectorItem;
   onClose: () => void;
   onOpenSubagent?: OpenSubagentHandler;
-  subagentView?: SubagentDetailView;
 }) {
   const titleId = `execution-inspector-title-${item.seq}`;
   const [activeTab, setActiveTab] = useState<"overview" | "raw">("overview");
@@ -141,7 +139,6 @@ export function ExecutionInspector({
               expandResult
               fallback={item.detail}
               onOpenSubagent={onOpenSubagent}
-              subagentView={subagentView}
             />
           </div>
         ) : activeTab === "overview" ? (
@@ -163,7 +160,6 @@ export function ExecutionInspector({
                 expandResult
                 fallback={item.detail}
                 onOpenSubagent={onOpenSubagent}
-                subagentView={subagentView}
               />
             </section>
           </div>

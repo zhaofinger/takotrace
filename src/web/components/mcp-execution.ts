@@ -1,6 +1,4 @@
-import { asRecord as record, nonEmptyText as text, type UnknownRecord } from "../value-utils";
-
-type RecordValue = UnknownRecord;
+import { asRecord as record, nonEmptyText as text } from "../value-utils";
 
 export type NodeReplExecutionKind = "browser" | "computer-use" | "javascript";
 export type NodeReplExecutionSource = "metadata" | "code" | "fallback";

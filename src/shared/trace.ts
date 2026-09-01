@@ -214,6 +214,7 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
     const durationMs = numberAt(turn, ['durationMs']);
     const model = stringAt(turn, ['model'], ['modelName'], ['model_name']);
     const tokenUsage = normalizeTokenUsageBreakdown(turn.tokenUsage ?? turn.token_usage);
+    const context = record(turn.context);
     const at = completedAt ?? startedAt ?? updatedAt;
     const rawItems = Array.isArray(turn.items) ? turn.items : [];
     const items = rawItems.flatMap((rawItem): Array<Omit<TraceEvent, 'seq'>> => {
@@ -245,7 +246,17 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
         raw: rawItem,
       }];
     });
-    return [{ id: turnId, status, startedAt, completedAt, durationMs, model, tokenUsage, items }];
+    return [{
+      id: turnId,
+      status,
+      startedAt,
+      completedAt,
+      durationMs,
+      model,
+      tokenUsage,
+      ...(Object.keys(context).length ? { context: context as unknown as HistoricalThread['turns'][number]['context'] } : {}),
+      items,
+    }];
   });
   const declaredStatus = entityStatus(thread.status);
   const shouldDeriveStatus = record(thread.status).type === 'notLoaded';

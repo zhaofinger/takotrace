@@ -29,13 +29,10 @@ describe("sequence step spacing", () => {
     expect(selfBadgeRule).toContain("max-width: min(320px, calc(100vw - 96px))");
   });
 
-  it("keeps the shared inspector overlaying the replay canvas", () => {
-    const replayWorkspaceRule = styles.match(/\.vbg-custom-replay-workspace \{([^}]*)\}/)?.[1] ?? "";
+  it("keeps the shared inspector overlaying the sequence canvas", () => {
     const sequenceWorkspaceRule = styles.match(/\.vbg-custom-sequence__workspace--with-inspector \{([^}]*)\}/)?.[1] ?? "";
     const inspectorRule = styles.match(/\.vbg-custom-sequence__inspector \{([^}]*)\}/)?.[1] ?? "";
 
-    expect(replayWorkspaceRule).toContain("position: relative");
-    expect(replayWorkspaceRule).toContain("container-type: inline-size");
     expect(sequenceWorkspaceRule).toContain("grid-template-rows: minmax(0, 1fr)");
     expect(inspectorRule).toContain("position: absolute");
     expect(inspectorRule).toContain("right: 0");

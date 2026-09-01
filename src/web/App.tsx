@@ -21,6 +21,10 @@ export function filterThreadsByProvider(threads: Thread[], provider: SessionProv
   return threads.filter((thread) => (thread.provider ?? "codex") === provider);
 }
 
+export function retainSelectedTurnDetail(current: Turn | undefined, selectedTurnId: string | undefined): Turn | undefined {
+  return current?.id === selectedTurnId ? current : undefined;
+}
+
 export default function App() {
   const [theme, setTheme] = useState(readThemePreference);
   const [state, setState] = useState<AppState>(initialState);
@@ -171,8 +175,13 @@ export default function App() {
     : selectedTurn;
 
   useEffect(() => {
-    const requestToken = ++turnDetailRequestToken.current;
     setTurnDetail(undefined);
+    setTurnDetailError(undefined);
+  }, [selectedThreadId, selectedTurnId]);
+
+  useEffect(() => {
+    const requestToken = ++turnDetailRequestToken.current;
+    setTurnDetail((current) => retainSelectedTurnDetail(current, selectedTurnId));
     setTurnDetailError(undefined);
 
     if (!selectedThreadId || !selectedTurnId || !selectedTurn) {

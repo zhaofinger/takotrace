@@ -3,24 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   DetailPanel,
-  formatDuration,
-  formatTokenCount,
-  subagentNavigation,
   tokenBreakdownMetrics,
 } from "../../src/web/components/DetailPanel";
+import { ContextDetails, contextSections } from "../../src/web/components/ContextDetails";
+import { formatDuration, formatTokenCount } from "../../src/web/formatters";
 
 describe("DetailPanel polish", () => {
-  it("opens subagent details in the source view and restores its selection id", () => {
-    expect(subagentNavigation("trace", "event-7")).toEqual({
-      sourceSelectionId: "seq-event-7",
-      tab: "sequence",
-    });
-    expect(subagentNavigation("sequence", "event-7")).toEqual({
-      sourceSelectionId: "seq-event-7",
-      tab: "sequence",
-    });
-  });
-
   it("formats durations for quick scanning while preserving short values", () => {
     expect(formatDuration()).toBe("—");
     expect(formatDuration(420)).toBe("420ms");
@@ -40,13 +28,77 @@ describe("DetailPanel polish", () => {
     expect(markup).not.toContain(">Sequence</button>");
     expect(markup).not.toContain('id="turn-trace-tab"');
     expect(markup).toContain('id="turn-sequence-tab"');
+    expect(markup).toContain('id="turn-context-tab"');
     expect(markup).toContain('id="turn-json-tab"');
     expect(markup).not.toContain('id="turn-events-tab"');
     const tabs = markup.match(/<button[^>]+role="tab"[^>]*>/g) ?? [];
     expect(tabs[0]).toContain('id="turn-sequence-tab"');
-    expect(tabs[1]).toContain('id="turn-json-tab"');
+    expect(tabs[1]).toContain('id="turn-context-tab"');
+    expect(tabs[2]).toContain('id="turn-json-tab"');
     expect(tabs.filter((tab) => tab.includes('tabindex="0"'))).toHaveLength(1);
-    expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(1);
+    expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(2);
+  });
+
+  it('groups recorded run context without losing long instruction text', () => {
+    const longInstructions = 'Follow this instruction. '.repeat(300);
+    const context = {
+      source: 'rollout-file' as const,
+      session: {
+        base_instructions: longInstructions,
+        cli_version: '0.150.0',
+        git: { branch: 'codex/context-view' },
+      },
+      worldState: {
+        agents_md: { text: 'Project rules' },
+        permissions: { filesystem: 'workspace-write' },
+      },
+      turn: {
+        cwd: '/tmp/project',
+        model: 'gpt-5.6-sol',
+        effort: 'high',
+        approval_policy: 'never',
+        summary: 'Compacted context summary',
+      },
+    };
+    const sections = contextSections(context);
+    const markup = renderToStaticMarkup(createElement(ContextDetails, { context }));
+
+    expect(sections.map((section) => section.title)).toEqual([
+      'Instructions', 'Environment', 'Permissions', 'Runtime', 'Context management',
+    ]);
+    expect(markup).toContain('Run context');
+    expect(markup).toContain('Local rollout');
+    expect(markup).toContain('Base instructions');
+    expect(markup).toContain('Follow this instruction.');
+    expect(markup).not.toContain('[truncated');
+    expect(markup).toContain('Compacted context summary');
+  });
+
+  it('states when a provider did not record local context', () => {
+    const markup = renderToStaticMarkup(createElement(ContextDetails, {}));
+    expect(markup).toContain('No local context recorded');
+    expect(markup).toContain('did not expose a context snapshot');
+  });
+
+  it('renders Claude live capabilities and context usage with an honest source label', () => {
+    const context = {
+      source: 'claude-live' as const,
+      session: { cwd: '/tmp/project', model: 'claude-sonnet-4-6', claude_code_version: '2.1.0' },
+      worldState: {
+        permission_mode: 'default',
+        tools: ['Read', 'Edit'],
+        mcp_servers: [{ name: 'github', status: 'connected' }],
+        skills: ['frontend-testing'],
+      },
+      turn: { context_usage: { totalTokens: 12_000, maxTokens: 200_000, percentage: 6 } },
+    };
+    const markup = renderToStaticMarkup(createElement(ContextDetails, { context }));
+
+    expect(markup).toContain('Claude live');
+    expect(markup).toContain('Permission mode');
+    expect(markup).toContain('MCP servers');
+    expect(markup).toContain('Context usage');
+    expect(markup).toContain('12000');
   });
 
   it("renders a compact single-line summary without the repeated thread id", () => {

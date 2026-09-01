@@ -184,6 +184,7 @@ export class CodexClient implements TraceProvider {
             completedAt: turn.completedAt,
             model: turn.model,
             tokenUsage: turn.tokenUsage,
+            context: turn.context,
             items,
           }] as const]
           : [];
@@ -213,6 +214,7 @@ export class CodexClient implements TraceProvider {
               : {}),
             ...(turn.model === undefined && rolloutTurn.model !== undefined ? { model: rolloutTurn.model } : {}),
             ...(rolloutTurn.tokenUsage === undefined ? {} : { tokenUsage: rolloutTurn.tokenUsage }),
+            ...(rolloutTurn.context === undefined ? {} : { context: rolloutTurn.context }),
             ...(items === undefined ? {} : { items }),
           };
         });

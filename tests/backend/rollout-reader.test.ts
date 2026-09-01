@@ -161,6 +161,64 @@ describe('rollout reader', () => {
     ]);
   });
 
+  it('freezes session, world state, and run context at each turn', async () => {
+    const codexHome = await temporaryCodexHome();
+    const directory = join(codexHome, 'sessions', '2026', '08', '25');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, `rollout-2026-08-25T20-58-38-${THREAD_ID}.jsonl`), [
+      entry('session_meta', {
+        id: THREAD_ID,
+        cwd: '/tmp/project',
+        cli_version: '0.150.0',
+        base_instructions: { text: 'Base rules' },
+        git: { branch: 'codex/context-view' },
+      }),
+      entry('world_state', {
+        full: true,
+        state: {
+          agents_md: { text: 'Project rules' },
+          model: 'gpt-before',
+          permissions: { filesystem: { read: true }, network: false },
+        },
+      }),
+      entry('turn_context', {
+        turn_id: 'turn-1', cwd: '/tmp/project', effort: 'high', summary: 'Earlier summary',
+      }),
+      entry('event_msg', { type: 'task_started', turn_id: 'turn-1' }),
+      entry('event_msg', { type: 'task_complete', turn_id: 'turn-1' }),
+      entry('world_state', {
+        full: false,
+        state: { model: 'gpt-after', permissions: { network: true } },
+      }),
+      entry('turn_context', {
+        turn_id: 'turn-2', cwd: '/tmp/project', approval_policy: 'never',
+      }),
+      entry('event_msg', { type: 'task_started', turn_id: 'turn-2' }),
+      entry('event_msg', { type: 'task_complete', turn_id: 'turn-2' }),
+    ].join('\n'));
+
+    const result = await readRolloutThread(THREAD_ID, { codexHome });
+    const turns = result?.thread.turns as Array<Record<string, unknown>>;
+    const first = turns[0].context as Record<string, Record<string, unknown>>;
+    const second = turns[1].context as Record<string, Record<string, unknown>>;
+
+    expect(first.session).toMatchObject({
+      base_instructions: { text: 'Base rules' },
+      git: { branch: 'codex/context-view' },
+    });
+    expect(first.worldState).toMatchObject({
+      model: 'gpt-before',
+      permissions: { filesystem: { read: true }, network: false },
+    });
+    expect(first.turn).toMatchObject({ effort: 'high', summary: 'Earlier summary' });
+    expect(first.turn).not.toHaveProperty('turn_id');
+    expect(second.worldState).toMatchObject({
+      model: 'gpt-after',
+      permissions: { filesystem: { read: true }, network: true },
+    });
+    expect(second.turn).toMatchObject({ approval_policy: 'never' });
+  });
+
   it('rejects non-Codex ids without touching arbitrary paths', async () => {
     const codexHome = await temporaryCodexHome();
     await expect(readRolloutThread('../sessions/secret', { codexHome })).resolves.toBeUndefined();

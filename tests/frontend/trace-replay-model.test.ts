@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  replayActionCounts,
-  replayExecutionTiming,
-  replayGroupStatus,
-  traceReplayModel,
-} from "../../src/web/components/trace-replay-model.js";
+import { traceReplayModel } from "../../src/web/components/trace-replay-model.js";
 import type { TraceEvent } from "../../src/web/types.js";
 
 describe("trace replay model", () => {
@@ -107,7 +102,7 @@ describe("trace replay model", () => {
     ]);
   });
 
-  it("detects observed parallel actions from lifecycle overlap", () => {
+  it("preserves observed timing for overlapping lifecycle actions", () => {
     const firstStarted = event(2, "commandExecution");
     firstStarted.method = "item/started";
     firstStarted.status = "running";
@@ -128,12 +123,10 @@ describe("trace replay model", () => {
     const execution = model.blocks.find((block) => block.type === "execution");
     if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
 
-    expect(replayExecutionTiming(execution.actions)).toMatchObject({
-      mode: "observed",
-      maxConcurrency: 2,
-      timedActions: 2,
-      wallTimeMs: 3_000,
-    });
+    expect(execution.actions.map(({ timing, durationMs }) => ({ timing, durationMs }))).toEqual([
+      { timing: "observed", durationMs: 3_000 },
+      { timing: "observed", durationMs: 1_000 },
+    ]);
   });
 
   it("marks completion-plus-duration overlap as inferred", () => {
@@ -143,44 +136,10 @@ describe("trace replay model", () => {
     const execution = model.blocks.find((block) => block.type === "execution");
     if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
 
-    expect(replayExecutionTiming(execution.actions)).toMatchObject({
-      mode: "inferred",
-      maxConcurrency: 2,
-      timedActions: 2,
-      wallTimeMs: 3_000,
-    });
-  });
-
-  it("detects inferred overlap across narrative phases", () => {
-    const model = traceReplayModel([
-      event(1, "agentMessage"),
-      { ...event(2, "commandExecution"), at: "2026-08-25T08:00:06.000Z", durationMs: 3_000 },
-      event(3, "reasoning", { summary: ["next phase"] }),
-      { ...event(4, "mcpToolCall"), at: "2026-08-25T08:00:06.000Z", durationMs: 1_000 },
+    expect(execution.actions.map(({ timing, durationMs }) => ({ timing, durationMs }))).toEqual([
+      { timing: "inferred", durationMs: 3_000 },
+      { timing: "inferred", durationMs: 1_000 },
     ]);
-    const execution = model.blocks.find((block) => block.type === "execution");
-    if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
-
-    expect(replayExecutionTiming(execution.actions)).toMatchObject({
-      mode: "inferred",
-      maxConcurrency: 2,
-      timedActions: 2,
-      wallTimeMs: 3_000,
-    });
-  });
-
-  it("summarizes action types and gives failures priority", () => {
-    const model = traceReplayModel([
-      event(1, "agentMessage", { phase: "commentary" }),
-      event(2, "commandExecution"),
-      { ...event(3, "commandExecution"), status: "running" },
-      { ...event(4, "fileChange"), status: "failed" },
-    ]);
-    const execution = model.blocks.find((block) => block.type === "execution");
-    if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
-
-    expect(replayActionCounts(execution.actions)).toEqual([["Tool", 2], ["Files", 1]]);
-    expect(replayGroupStatus(execution.actions)).toBe("failed");
   });
 
   it("treats a completed command with a non-zero exit code as a failed outcome", () => {
@@ -192,7 +151,6 @@ describe("trace replay model", () => {
     if (!execution || execution.type !== "execution") throw new Error("Expected execution block");
 
     expect(execution.actions[0].status).toBe("failed");
-    expect(replayGroupStatus(execution.actions)).toBe("failed");
   });
 });
 

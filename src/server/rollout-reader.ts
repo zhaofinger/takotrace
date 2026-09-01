@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { addTokenUsage, normalizeThreadTokenUsage, tokenUsageDelta } from '../shared/trace.js';
-import type { ThreadTokenUsage, TokenUsageBreakdown } from '../shared/types.js';
+import type { ThreadTokenUsage, TokenUsageBreakdown, TurnContextSnapshot } from '../shared/types.js';
 
 const THREAD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,6 +25,7 @@ interface RolloutTurn {
   durationMs?: number;
   model?: string;
   tokenUsage?: TokenUsageBreakdown;
+  context?: TurnContextSnapshot;
   items: Map<string, Record<string, unknown>>;
 }
 
@@ -45,6 +46,7 @@ export async function readRolloutThread(
 
   const turns = new Map<string, RolloutTurn>();
   let sessionMeta: Record<string, unknown> = {};
+  let worldState: Record<string, unknown> = {};
   let firstTimestamp: number | undefined;
   let lastTimestamp: number | undefined;
   let preview: string | undefined;
@@ -73,7 +75,9 @@ export async function readRolloutThread(
     }
     const payload = record(entry.payload);
     if (entry.type === 'world_state') {
-      currentModel = stringField(record(payload.state).model) ?? currentModel;
+      const nextState = record(payload.state);
+      worldState = payload.full === true ? structuredClone(nextState) : mergeRecords(worldState, nextState);
+      currentModel = stringField(worldState.model) ?? currentModel;
       continue;
     }
     if (entry.type === 'response_item') {
@@ -88,7 +92,7 @@ export async function readRolloutThread(
       continue;
     }
     if (entry.type === 'session_meta') {
-      sessionMeta = payload;
+      sessionMeta = mergeRecords(sessionMeta, payload);
       continue;
     }
     if (entry.type === 'turn_context') {
@@ -97,6 +101,12 @@ export async function readRolloutThread(
         activeTurnId = turnId;
         mostRecentTurnId = turnId;
         const turn = getOrCreateTurn(turns, turnId);
+        turn.context = {
+          source: 'rollout-file',
+          session: pickFields(sessionMeta, SESSION_CONTEXT_FIELDS),
+          worldState: pickFields(worldState, WORLD_STATE_CONTEXT_FIELDS),
+          turn: mergeRecords(turn.context?.turn ?? {}, pickFields(payload, TURN_CONTEXT_FIELDS)),
+        };
         turn.model = stringField(payload.model)
           ?? stringField(record(payload.thread_settings).model)
           ?? turn.model
@@ -179,6 +189,7 @@ export async function readRolloutThread(
       ...(turn.durationMs === undefined ? {} : { durationMs: turn.durationMs }),
       ...(turn.model === undefined ? {} : { model: turn.model }),
       ...(turn.tokenUsage === undefined ? {} : { tokenUsage: turn.tokenUsage }),
+      ...(turn.context === undefined ? {} : { context: turn.context }),
       items: [...turn.items.values()],
     }));
   if (!historicalTurns.length) return undefined;
@@ -206,6 +217,48 @@ export async function readRolloutThread(
       turns: historicalTurns,
     },
   };
+}
+
+const SESSION_CONTEXT_FIELDS = [
+  'base_instructions', 'cli_version', 'context_window', 'cwd', 'git', 'history_mode',
+  'model_provider', 'originator', 'source', 'thread_source',
+] as const;
+
+const WORLD_STATE_CONTEXT_FIELDS = [
+  'agents_md', 'apps_instructions', 'collaboration_mode', 'context_window_guidance',
+  'environments', 'environments_instructions', 'git_attribution', 'host_skills',
+  'managed_developer_instructions', 'model', 'multi_agent_mode', 'multi_agent_usage_hint',
+  'orchestrator_skills', 'permissions', 'persistent_mode', 'personality',
+  'plugins_instructions', 'realtime', 'skills',
+] as const;
+
+const TURN_CONTEXT_FIELDS = [
+  'active_permission_profile', 'approval_policy', 'approvals_reviewer', 'collaboration_mode',
+  'comp_hash', 'current_date', 'cwd', 'effort', 'model', 'multi_agent_version',
+  'permission_profile', 'personality', 'realtime_active', 'sandbox_policy', 'summary',
+  'timezone', 'workspace_roots',
+] as const;
+
+function pickFields(source: Record<string, unknown>, fields: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(fields.flatMap((field) => source[field] === undefined ? [] : [[field, structuredClone(source[field])]]));
+}
+
+function mergeRecords(
+  current: Record<string, unknown>,
+  update: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged = { ...current };
+  for (const [key, value] of Object.entries(update)) {
+    const previous = merged[key];
+    merged[key] = isRecord(previous) && isRecord(value)
+      ? mergeRecords(previous, value)
+      : structuredClone(value);
+  }
+  return merged;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function attachToolCallMetadata(item: Record<string, unknown>, toolCall: RolloutToolCall): void {

@@ -55,7 +55,6 @@ describe("subagent detail targets", () => {
         receiverThreadIds: ["child-1"],
       }),
       fallback: "Spawn subagent",
-      subagentView: "trace",
     }));
 
     expect(markup).toContain("Loading assigned task and result…");
@@ -123,7 +122,6 @@ describe("loaded subagent thread", () => {
   it("shows the child run status, identity, timing, steps, result, and source view entry", () => {
     const thread = threadDetail();
     const markup = renderToStaticMarkup(createElement(SubagentThreadContent, {
-      detailView: "sequence",
       thread,
       onOpenThread: () => undefined,
     }));

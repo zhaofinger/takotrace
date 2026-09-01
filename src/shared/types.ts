@@ -19,6 +19,13 @@ export interface ThreadTokenUsage {
   modelContextWindow?: number;
 }
 
+export interface TurnContextSnapshot {
+  source: 'rollout-file' | 'claude-history' | 'claude-live';
+  session: Record<string, unknown>;
+  worldState: Record<string, unknown>;
+  turn: Record<string, unknown>;
+}
+
 export interface TraceEvent {
   seq: number;
   startedSeq?: number;
@@ -39,6 +46,7 @@ export interface TraceEvent {
   model?: string;
   tokenUsage?: ThreadTokenUsage;
   provider?: ProviderId;
+  context?: TurnContextSnapshot;
   raw: unknown;
 }
 
@@ -50,6 +58,7 @@ export interface TurnState {
   durationMs?: number;
   model?: string;
   tokenUsage?: TokenUsageBreakdown;
+  context?: TurnContextSnapshot;
   items: TraceEvent[];
 }
 
@@ -79,8 +88,8 @@ export interface AppState {
   events: TraceEvent[];
 }
 
-export type CompactTraceEvent = Omit<TraceEvent, 'raw'>;
-export type CompactTurnState = Omit<TurnState, 'items'> & {
+export type CompactTraceEvent = Omit<TraceEvent, 'raw' | 'context'>;
+export type CompactTurnState = Omit<TurnState, 'items' | 'context'> & {
   summary: string;
   itemCount: number;
   items: CompactTraceEvent[];
@@ -101,6 +110,7 @@ export interface HistoricalTurn {
   durationMs?: number;
   model?: string;
   tokenUsage?: TokenUsageBreakdown;
+  context?: TurnContextSnapshot;
   items: Array<Omit<TraceEvent, 'seq'>>;
 }
 
