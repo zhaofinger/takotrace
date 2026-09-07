@@ -1,4 +1,5 @@
 import type { CompactTraceEvent, ThreadDetail, TraceEvent } from "../types";
+import { parseQuestionReply, userMessageText } from "../../shared/user-message";
 import { eventRaw, normalizedEventType, traceEventId } from "../trace-event";
 import { asRecord as record, nonEmptyText as text, type UnknownRecord } from "../value-utils";
 import { commandText, workingDirectoryText } from "./command-display";
@@ -204,6 +205,7 @@ function SubagentDetails({
 }
 
 function UserMessageDetails({ event, fallback, raw }: { event: DetailEvent; fallback: string; raw: RecordValue }) {
+  const replies = parseQuestionReply(userMessageText(raw) ?? fallback);
   const content = Array.isArray(raw.content) ? raw.content.map(record) : [];
   const images = content.flatMap((entry, index) => (entry.type === "localImage" || entry.type === "local_image") && text(entry.path)
     ? [{ index, path: text(entry.path)! }]
@@ -212,7 +214,18 @@ function UserMessageDetails({ event, fallback, raw }: { event: DetailEvent; fall
 
   return (
     <div className="vbg-custom-user-message">
-      <MarkdownContent>{fallback}</MarkdownContent>
+      {replies ? (
+        <div className="vbg-custom-question-replies" aria-label="User answers">
+          {replies.map(({ question, answer }, index) => (
+            <dl className="vbg-custom-question-reply" key={index}>
+              <dt>Question{replies.length > 1 ? ` ${index + 1}` : ""}</dt>
+              <dd>{question}</dd>
+              <dt>Answer</dt>
+              <dd>{answer || <span className="vbg-custom-question-reply__empty">(empty)</span>}</dd>
+            </dl>
+          ))}
+        </div>
+      ) : <MarkdownContent>{fallback}</MarkdownContent>}
       {images.length > 0 && (
         <div aria-label="User attachments" className="vbg-custom-user-attachments">
           {images.map((image) => {

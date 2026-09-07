@@ -193,6 +193,7 @@ export function compactSequenceSummary(content: string, fallback: string): strin
 
 function contentSummary(node: FlowNode): string | undefined {
   if (node.kind !== "user" && node.kind !== "agent" && node.kind !== "reasoning") return undefined;
+  if (node.summary) return node.summary.replace(/\s+/g, " ").trim();
   return compactSequenceSummary(node.detail, node.title);
 }
 

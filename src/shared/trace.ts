@@ -1,6 +1,7 @@
 import type {
   EntityStatus, HistoricalThread, ProviderId, RpcNotification, ThreadTokenUsage, TokenUsageBreakdown, TraceEvent,
 } from './types.js';
+import { userMessageSummary } from './user-message.js';
 
 type RecordValue = Record<string, unknown>;
 
@@ -35,15 +36,10 @@ function summaryFor(method: string, params: unknown): string {
     ?? stringAt(firstText, ['text'])
     ?? stringAt(values, ['thread', 'name'], ['thread', 'preview']);
   if (text) {
-    const summary = item.type === 'userMessage' ? extractUserRequest(text) : text;
+    const summary = item.type === 'userMessage' ? userMessageSummary(text) : text;
     return summary.length > 160 ? `${summary.slice(0, 157)}...` : summary;
   }
   return method.replaceAll('/', ' ');
-}
-
-function extractUserRequest(text: string): string {
-  const marker = /## My request:\s*/i.exec(text);
-  return marker ? text.slice(marker.index + marker[0].length).trim() : text;
 }
 
 function eventStatus(method: string, params: unknown): EntityStatus {

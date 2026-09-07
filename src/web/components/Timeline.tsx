@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { userMessageSummary } from "../../shared/user-message";
 import { formatClockTime, formatDateTime, formatExactNumber, formatPercentage } from "../formatters";
 import { eventRaw, normalizedEventType } from "../trace-event";
 import type { CompactTraceEvent, CompactTurn, Thread, Turn } from "../types";
@@ -29,10 +30,7 @@ function rawItemText(item: DisplayTraceEvent): string | undefined {
 }
 
 function requestText(item: DisplayTraceEvent): string {
-  const text = rawItemText(item) ?? item.summary;
-  const marker = "## My request:";
-  const markerIndex = text.indexOf(marker);
-  return (markerIndex >= 0 ? text.slice(markerIndex + marker.length) : text).trim();
+  return userMessageSummary(rawItemText(item) ?? item.summary).trim();
 }
 
 export function turnSummary(turn: CompactTurn | Turn): string {

@@ -1,4 +1,5 @@
 import type { CompactTraceEvent, TraceEvent } from "../types";
+import { parseQuestionReply, userMessageSummary, userMessageText } from "../../shared/user-message";
 import { eventRaw, timestampMs } from "../trace-event";
 import { asRecord as record, nonEmptyText as text, normalizedToken } from "../value-utils";
 import type { IconName } from "./Icon";
@@ -14,6 +15,7 @@ export interface FlowNode {
   title: string;
   participantName?: string;
   detail: string;
+  summary?: string;
   meta?: string;
   showStatus?: boolean;
   statusLabel?: string;
@@ -34,15 +36,6 @@ function subagentName(raw: Record<string, unknown>): string | undefined {
   )).find(Boolean);
   const path = namedAgent ?? text(raw.agentPath) ?? text(raw.agent_path);
   return path?.split("/").filter(Boolean).pop();
-}
-
-function userText(raw: Record<string, unknown>): string | undefined {
-  const content = raw.content;
-  if (!Array.isArray(content)) return undefined;
-  const value = content.map((entry) => text(record(entry).text)).filter(Boolean).join("\n\n");
-  const marker = "## My request:";
-  const markerIndex = value.indexOf(marker);
-  return (markerIndex >= 0 ? value.slice(markerIndex + marker.length) : value).trim() || undefined;
 }
 
 function reasoningText(raw: Record<string, unknown>): string | undefined {
@@ -91,7 +84,14 @@ export function flowNode(event: FlowEvent): FlowNode {
     : "No additional detail";
 
   if (type === "usermessage") {
-    return { kind: "user", label: "User", title: "Request", detail: userText(raw) ?? fallback };
+    const content = userMessageText(raw) ?? fallback;
+    const replies = parseQuestionReply(content);
+    return replies
+      ? {
+        kind: "user", label: "User", title: "Answer", summary: userMessageSummary(content),
+        detail: replies.map(({ question, answer }) => `Question: ${question}\n\nAnswer: ${answer}`).join("\n\n"),
+      }
+      : { kind: "user", label: "User", title: "Request", detail: content };
   }
   if (type === "agentmessage") {
     const phase = text(raw.phase);
