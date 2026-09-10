@@ -1,5 +1,12 @@
 import "./style.css";
 import { copyMessage } from "./i18n.js";
+import { inject } from "@vercel/analytics";
+import { injectSpeedInsights } from "@vercel/speed-insights";
+
+if (import.meta.env.PROD) {
+  inject({ mode: "production" });
+  injectSpeedInsights();
+}
 
 let toastTimeout;
 const toast = document.querySelector(".toast");
