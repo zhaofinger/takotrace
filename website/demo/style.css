@@ -1,0 +1,29 @@
+/* Keep the real application layout compact inside the homepage preview. */
+.vbg-report {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.vbg-custom-workspace {
+  grid-template-columns: 185px 205px minmax(0, 1fr);
+}
+@media (max-width: 900px) {
+  .vbg-report {
+    overflow: hidden;
+  }
+  .vbg-custom-app-shell {
+    height: 100dvh;
+    min-height: 0;
+    grid-template-rows: 56px minmax(0, 1fr);
+  }
+  .vbg-custom-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .vbg-custom-timeline {
+    max-height: 150px;
+  }
+  .vbg-custom-detail {
+    min-height: 0;
+    max-height: none;
+  }
+}

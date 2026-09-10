@@ -3,7 +3,7 @@
 .vercel
 .env*
 node_modules
-src
+src/server
 tests
 plans
 dist

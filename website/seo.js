@@ -42,12 +42,9 @@ export function renderPage(html, language, siteUrl) {
     "aria-label",
     english ? "切换到中文" : "Switch to English",
   );
-  // Use the bundled image URL for the full-size link, including without JavaScript.
-  const screenshot = document.querySelector(".screenshot");
-  document
-    .querySelector(".product > a")
-    .setAttribute("href", screenshot.getAttribute("src"));
-
+  const imageAlt = english
+    ? "TakoTrace session inspector and sequence diagram"
+    : "TakoTrace 会话查看器和时序图";
   const meta = (key, value, attribute = "name") => {
     let element = document.head.querySelector(`meta[${attribute}="${key}"]`);
     if (!element) {
@@ -82,10 +79,10 @@ export function renderPage(html, language, siteUrl) {
   meta("twitter:card", "summary_large_image");
   meta("twitter:title", title);
   meta("twitter:description", description);
-  meta("og:image:alt", screenshot.getAttribute("alt"), "property");
-  meta("twitter:image:alt", screenshot.getAttribute("alt"));
-  meta("og:image:width", screenshot.getAttribute("width"), "property");
-  meta("og:image:height", screenshot.getAttribute("height"), "property");
+  meta("og:image:alt", imageAlt, "property");
+  meta("twitter:image:alt", imageAlt);
+  meta("og:image:width", "3108", "property");
+  meta("og:image:height", "2096", "property");
   meta("og:image:type", "image/png", "property");
 
   const pageUrl = siteUrl && new URL(english ? "en.html" : "./", siteUrl).href;
@@ -95,7 +92,7 @@ export function renderPage(html, language, siteUrl) {
     link("alternate", new URL("en.html", siteUrl).href, "en");
     link("alternate", siteUrl, "x-default");
     meta("og:url", pageUrl, "property");
-    const imageUrl = new URL(screenshot.getAttribute("src"), siteUrl).href;
+    const imageUrl = new URL("assets/takotrace-preview.png", siteUrl).href;
     meta("og:image", imageUrl, "property");
     meta("twitter:image", imageUrl);
   }
@@ -143,6 +140,14 @@ export function websiteSeo(siteUrl) {
     transformIndexHtml: {
       order: "post",
       handler(html, context) {
+        if (context.path.endsWith("/demo.html")) {
+          return context.server
+            ? html
+            : html.replace(
+                "</head>",
+                `<meta http-equiv="Content-Security-Policy" content="connect-src 'none'"></head>`,
+              );
+        }
         // Development previews are deliberately not indexable.
         return renderPage(
           html,
@@ -167,7 +172,12 @@ export function websiteSeo(siteUrl) {
         }
       });
     },
-    generateBundle(_options, bundle) {
+    async generateBundle(_options, bundle) {
+      this.emitFile({
+        type: "asset",
+        fileName: "assets/takotrace-preview.png",
+        source: await readFile(resolve("assets/takotrace-screenshot.png")),
+      });
       const index = bundle["index.html"];
       if (!index || index.type !== "asset")
         throw new Error("Missing website index.html");

@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
+import { demoPlugins, websiteInputs } from "./demo-build.js";
 import { normalizeSiteUrl, websiteSeo } from "./seo.js";
 
 export default defineConfig(({ mode }) => {
@@ -7,8 +8,12 @@ export default defineConfig(({ mode }) => {
   return {
     root: "website",
     base: "./",
-    plugins: [websiteSeo(siteUrl)],
-    build: { outDir: "../dist-website", emptyOutDir: true },
+    plugins: [...demoPlugins(), websiteSeo(siteUrl)],
+    build: {
+      outDir: "../dist-website",
+      emptyOutDir: true,
+      rollupOptions: { input: websiteInputs },
+    },
     server: { host: "127.0.0.1", port: 4174 },
   };
 });

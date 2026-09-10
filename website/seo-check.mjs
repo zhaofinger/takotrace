@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { parseHTML } from "linkedom";
 import { build } from "vite";
+import { demoPlugins, websiteInputs } from "./demo-build.js";
 import { normalizeSiteUrl, renderPage, websiteSeo } from "./seo.js";
 
 const source = await readFile(new URL("./index.html", import.meta.url), "utf8");
@@ -38,13 +39,30 @@ test("build emits translated HTML, reciprocal languages, sitemap, and bundled im
     root: "website",
     base: "./",
     logLevel: "silent",
-    plugins: [websiteSeo(siteUrl)],
-    build: { write: false },
+    plugins: [...demoPlugins(), websiteSeo(siteUrl)],
+    build: { write: false, rollupOptions: { input: websiteInputs } },
   });
   const assets = new Map(
     result.output
       .filter((item) => item.type === "asset")
       .map((item) => [item.fileName, String(item.source)]),
+  );
+  const demo = parseHTML(assets.get("demo.html")).document;
+  assert.equal(
+    demo.querySelector('meta[name="robots"]').content,
+    "noindex, follow",
+  );
+  assert.equal(
+    demo.querySelector('meta[http-equiv="Content-Security-Policy"]').content,
+    "connect-src 'none'",
+  );
+  const javascript = result.output
+    .filter((item) => item.type === "chunk")
+    .map((item) => item.code)
+    .join("\n");
+  assert.doesNotMatch(
+    javascript,
+    /new EventSource|\/api\/state|\/api\/subagents/,
   );
   assert.ok(
     assets.get("robots.txt").includes(`Sitemap: ${siteUrl}sitemap.xml`),
@@ -90,9 +108,10 @@ test("build emits translated HTML, reciprocal languages, sitemap, and bundled im
     ).content;
     assert.ok(imageUrl.startsWith(`${siteUrl}assets/`));
     assert.ok(assets.has(imageUrl.slice(siteUrl.length)));
-    assert.equal(
-      document.querySelector(".product > a").getAttribute("href"),
-      document.querySelector(".screenshot").getAttribute("src"),
+    assert.equal(document.querySelectorAll("iframe.demo-frame").length, 1);
+    assert.match(
+      document.querySelector("iframe").getAttribute("src"),
+      /demo.html\?lang=/,
     );
     assert.equal(document.querySelectorAll("h1").length, 1);
     assert.equal(document.querySelectorAll('link[rel="canonical"]').length, 1);

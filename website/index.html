@@ -98,27 +98,28 @@
         <figure class="product" id="preview">
           <div class="window-bar">
             <div class="window-dots"><i></i><i></i><i></i></div>
-            <span>127.0.0.1:4317</span
+            <span>互动演示 · Mock 数据</span
             ><span class="local-label"
               ><span class="status-dot"></span
-              ><span class="local-text">运行在你的电脑上</span></span
+              ><span class="local-text">不连接本地会话</span></span
             >
           </div>
-          <a
-            href="../assets/takotrace-screenshot.png"
-            target="_blank"
-            rel="noopener"
-            aria-label="在新标签页查看完整 TakoTrace 产品截图"
-            ><img
-              class="screenshot"
-              src="../assets/takotrace-screenshot.png"
-              alt="TakoTrace 真实界面：左侧浏览会话，右侧用时序图展示用户、Agent 和工具之间的调用"
-              width="3108"
-              height="2096"
-              fetchpriority="high"
-          /></a>
+          <iframe
+            class="demo-frame"
+            src="./demo.html?lang=zh"
+            title="TakoTrace 互动演示，使用模拟数据"
+            loading="lazy"
+            allow="clipboard-write"
+          ></iframe>
           <figcaption>
-            <span>会话列表与时序图</span><span>查看完整截图 ↗</span>
+            <span>点击会话或步骤查看详情 · 模拟数据</span
+            ><a
+              class="demo-open"
+              href="./demo.html?lang=zh"
+              target="_blank"
+              rel="noopener"
+              >打开完整演示 ↗</a
+            >
           </figcaption>
         </figure>
       </section>

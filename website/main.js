@@ -1,8 +1,5 @@
 import "./style.css";
 import { copyMessage } from "./i18n.js";
-import screenshotUrl from "../assets/takotrace-screenshot.png";
-
-document.querySelector(".product > a").href = screenshotUrl;
 
 let toastTimeout;
 const toast = document.querySelector(".toast");

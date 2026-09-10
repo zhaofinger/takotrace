@@ -222,17 +222,6 @@ h1 {
   width: 5px;
   height: 5px;
 }
-.product > a {
-  display: block;
-  max-height: 510px;
-  overflow: hidden;
-  background: #000;
-}
-.screenshot {
-  width: 100%;
-  height: auto;
-  display: block;
-}
 .product figcaption {
   display: flex;
   justify-content: space-between;
@@ -619,9 +608,6 @@ h3 {
     justify-content: flex-start;
     gap: 22px;
   }
-  .product > a {
-    max-height: 330px;
-  }
   .product figcaption {
     font-size: 9px;
     padding: 12px 10px;
@@ -725,5 +711,26 @@ html[lang="en"] h1 {
   }
   html[lang="en"] .footer > span {
     margin-left: 0;
+  }
+}
+
+.demo-frame {
+  display: block;
+  width: 100%;
+  height: 650px;
+  border: 0;
+  background: #000;
+}
+.demo-open {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .demo-frame {
+    height: 720px;
+  }
+  .product figcaption {
+    flex-wrap: wrap;
+    gap: 10px;
   }
 }
