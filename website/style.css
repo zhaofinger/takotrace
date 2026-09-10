@@ -167,6 +167,15 @@ h1 {
   color: #6e796a;
   margin-left: 12px;
 }
+.copy-check,
+.is-copied .copy-shape {
+  display: none;
+}
+.is-copied .copy-check {
+  display: block;
+  stroke: var(--green);
+  stroke-width: 2;
+}
 .hero-meta {
   font-size: 11px;
   color: #7a8175;

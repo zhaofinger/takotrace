@@ -7,10 +7,18 @@ document.querySelector(".product > a").href = screenshotUrl;
 let toastTimeout;
 const toast = document.querySelector(".toast");
 for (const button of document.querySelectorAll("[data-copy]")) {
+  let copiedTimeout;
   button.addEventListener("click", async () => {
+    clearTimeout(copiedTimeout);
+    button.classList.remove("is-copied");
     try {
       await navigator.clipboard.writeText(button.dataset.copy);
       toast.textContent = copyMessage(true);
+      button.classList.add("is-copied");
+      copiedTimeout = setTimeout(
+        () => button.classList.remove("is-copied"),
+        2000,
+      );
     } catch {
       toast.textContent = copyMessage(false);
     }
