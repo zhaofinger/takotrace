@@ -1,0 +1,12 @@
+.git
+.github
+.vercel
+.env*
+node_modules
+src
+tests
+plans
+dist
+dist-website
+*.md
+tsconfig*.json

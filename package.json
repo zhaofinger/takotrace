@@ -47,7 +47,11 @@
     "dev:web": "vite",
     "prepublishOnly": "npm run test && npm run typecheck && npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root ."
+    "test": "vitest run --root .",
+    "website:dev": "vite --config website/vite.config.ts",
+    "website:build": "vite build --config website/vite.config.ts",
+    "website:preview": "vite preview --config website/vite.config.ts --host 127.0.0.1 --port 4174",
+    "website:test": "node --test website/seo-check.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.250",
@@ -63,6 +67,7 @@
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^10.0.5",
+    "linkedom": "^0.18.13",
     "tsx": "^4.23.12",
     "typescript": "^5.9.2",
     "vite": "^6.1.0",

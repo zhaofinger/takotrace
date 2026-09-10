@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fafbf8" />
+    <meta
+      name="description"
+      content="TakoTrace 是开源、本地优先的 AI 编程会话查看器。用时间线、时序图和原始事件，了解 Codex 与 Claude Code 的运行过程。"
+    />
+    <meta
+      property="og:title"
+      content="TakoTrace · Codex 与 Claude Code 会话查看器"
+    />
+    <meta
+      property="og:description"
+      content="查看 Codex 与 Claude Code 的工具调用、文件修改和子任务。在本地运行，开源免费。"
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="../assets/takotrace-logo.png" />
+    <title>TakoTrace · Codex 与 Claude Code 会话查看器</title>
+  </head>
+  <body>
+    <a class="skip" href="#main">跳转到内容</a>
+    <header class="header wrap">
+      <a class="brand" href="#" aria-label="TakoTrace 首页"
+        ><img
+          src="../assets/takotrace-logo.png"
+          alt=""
+          width="34"
+          height="34"
+        />TakoTrace</a
+      >
+      <nav aria-label="主导航">
+        <a href="#features">功能</a><a href="#start">快速开始</a
+        ><a class="github" href="https://github.com/zhaofinger/takotrace"
+          >GitHub <span aria-hidden="true">↗</span></a
+        >
+        <a
+          class="language-toggle"
+          href="./en.html"
+          aria-label="Switch to English"
+          lang="en"
+          hreflang="en"
+          >English</a
+        >
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero wrap">
+        <div class="eyebrow">
+          <span class="status-dot"></span
+          ><span class="hero-label">开源 · 本地运行</span>
+        </div>
+        <h1>
+          <span class="hero-title">了解 Agent 的</span
+          ><span class="accent">运行过程</span>
+        </h1>
+        <p class="hero-description">
+          查看 Codex 与 Claude Code 的会话记录，<br />包括工具调用、文件修改和子任务。
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="#start"
+            >快速开始 <span aria-hidden="true">↗</span></a
+          ><button
+            class="command-copy"
+            data-copy="npx takotrace"
+            aria-label="复制启动命令 npx takotrace"
+          >
+            <span class="prompt">$</span><code>npx takotrace</code
+            ><svg
+              class="copy-icon"
+              aria-hidden="true"
+              focusable="false"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="9" y="9" width="12" height="12" rx="2" />
+              <path
+                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+              />
+            </svg>
+          </button>
+        </div>
+        <p class="hero-meta">
+          <span class="supported">支持 Codex & Claude Code</span>
+          <span>·</span> Node.js 22+ <span>·</span> Apache-2.0
+        </p>
+        <figure class="product" id="preview">
+          <div class="window-bar">
+            <div class="window-dots"><i></i><i></i><i></i></div>
+            <span>127.0.0.1:4317</span
+            ><span class="local-label"
+              ><span class="status-dot"></span
+              ><span class="local-text">运行在你的电脑上</span></span
+            >
+          </div>
+          <a
+            href="../assets/takotrace-screenshot.png"
+            target="_blank"
+            rel="noopener"
+            aria-label="在新标签页查看完整 TakoTrace 产品截图"
+            ><img
+              class="screenshot"
+              src="../assets/takotrace-screenshot.png"
+              alt="TakoTrace 真实界面：左侧浏览会话，右侧用时序图展示用户、Agent 和工具之间的调用"
+              width="3108"
+              height="2096"
+              fetchpriority="high"
+          /></a>
+          <figcaption>
+            <span>会话列表与时序图</span><span>查看完整截图 ↗</span>
+          </figcaption>
+        </figure>
+      </section>
+      <section class="features wrap section" id="features">
+        <div class="section-heading">
+          <div>
+            <h2>可以查看什么</h2>
+          </div>
+          <p>按会话浏览，展开每次运行的具体步骤。</p>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <div class="mini timeline" aria-hidden="true">
+              <div><i></i><span>用户请求</span><small>01</small></div>
+              <div><i></i><span>Agent 推理</span><small>02</small></div>
+              <div><i></i><span>工具调用</span><small>03</small></div>
+            </div>
+
+            <h3>执行步骤</h3>
+            <p>
+              用时间线和时序图查看 Agent
+              执行了哪些命令、修改了哪些文件，以及调用的 MCP 工具和 Skill。
+            </p>
+          </article>
+          <article>
+            <div class="mini agents" aria-hidden="true">
+              <span class="agent-root">Agent</span>
+              <div class="branches">
+                <span>Subagent A</span><span>Subagent B</span>
+              </div>
+            </div>
+
+            <h3>子任务</h3>
+            <p>查看 Agent 创建的子任务，以及对应的 Subagent 会话和执行记录。</p>
+          </article>
+          <article>
+            <div class="mini raw" aria-hidden="true">
+              <code
+                ><span>{</span><br />&nbsp; "type":
+                <b>"tool_call"</b>,<br />&nbsp; "status": <b>"completed"</b
+                ><br /><span>}</span></code
+              ><span class="sample-label">结构示意</span>
+            </div>
+
+            <h3>上下文与原始事件</h3>
+            <p>
+              在 Context 中查看上下文和 Token 用量，需要核对事件时可以打开 Raw
+              JSON。
+            </p>
+          </article>
+        </div>
+      </section>
+      <section class="local-section">
+        <div class="wrap local-grid">
+          <div>
+            <h2>在你的电脑上运行</h2>
+            <p>
+              连接本机的 Codex 与 Claude Code，登录仍由它们处理。TakoTrace
+              不增加遥测或远程会话存储。
+            </p>
+            <a
+              class="text-link"
+              href="https://github.com/zhaofinger/takotrace/blob/main/README.zh-CN.md#数据与安全"
+              >了解数据与安全 <span aria-hidden="true">↗</span></a
+            >
+          </div>
+          <div class="local-details">
+            <div>
+              <span>01</span>
+              <div>
+                <h3>本地优先</h3>
+                <p>默认监听 127.0.0.1，运行状态保存在内存中。</p>
+              </div>
+            </div>
+            <div>
+              <span>02</span>
+              <div>
+                <h3>只读访问历史</h3>
+                <p>本地历史读取与 Codex rollout 回退均为只读。</p>
+              </div>
+            </div>
+            <div>
+              <span>03</span>
+              <div>
+                <h3>开放源码</h3>
+                <p>代码以 Apache-2.0 许可证开源。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="wrap section start" id="start">
+        <div>
+          <h2>开始使用</h2>
+          <p>
+            需要 Node.js 22+，并已安装 Codex 或 Claude
+            Code。在终端运行这条命令，浏览器会自动打开。
+          </p>
+          <a
+            class="text-link"
+            href="https://github.com/zhaofinger/takotrace/blob/main/README.zh-CN.md"
+            >阅读完整文档 ↗</a
+          >
+        </div>
+        <div class="install">
+          <div class="install-header">
+            <span>启动命令</span>
+          </div>
+          <div class="install-command">
+            <span>$</span><code id="install-code">npx takotrace</code
+            ><button
+              data-copy="npx takotrace"
+              id="install-copy"
+              aria-label="复制所选启动命令"
+            >
+              复制
+            </button>
+          </div>
+          <div
+            class="provider-options"
+            role="group"
+            aria-label="选择启动的 Provider"
+          >
+            <button aria-pressed="true" data-provider="all">自动检测</button
+            ><button aria-pressed="false" data-provider="codex">仅 Codex</button
+            ><button aria-pressed="false" data-provider="claude">
+              仅 Claude Code
+            </button>
+          </div>
+          <p class="install-note">
+            本地 API 没有通用认证层，请勿直接暴露到局域网或公网。
+          </p>
+        </div>
+      </section>
+    </main>
+    <footer class="wrap footer">
+      <a class="brand" href="#"
+        ><img
+          src="../assets/takotrace-logo.png"
+          width="28"
+          height="28"
+          alt=""
+        />TakoTrace</a
+      ><span>Codex 与 Claude Code 会话查看器</span>
+      <div>
+        <a href="https://github.com/zhaofinger/takotrace">GitHub ↗</a
+        ><a href="https://www.npmjs.com/package/takotrace">npm ↗</a
+        ><a href="https://github.com/zhaofinger/takotrace/blob/main/LICENSE"
+          >Apache-2.0</a
+        >
+      </div>
+    </footer>
+    <div class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
