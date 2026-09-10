@@ -714,10 +714,18 @@ html[lang="en"] h1 {
   }
 }
 
+.demo-viewport {
+  --demo-scale: 0.8;
+  --demo-height: 650px;
+  height: var(--demo-height);
+  overflow: hidden;
+}
 .demo-frame {
   display: block;
-  width: 100%;
-  height: 650px;
+  width: calc(100% / var(--demo-scale));
+  height: calc(var(--demo-height) / var(--demo-scale));
+  transform: scale(var(--demo-scale));
+  transform-origin: top left;
   border: 0;
   background: #000;
 }
@@ -726,8 +734,9 @@ html[lang="en"] h1 {
   text-underline-offset: 3px;
 }
 @media (max-width: 760px) {
-  .demo-frame {
-    height: 720px;
+  .demo-viewport {
+    --demo-scale: 0.9;
+    --demo-height: 720px;
   }
   .product figcaption {
     flex-wrap: wrap;
