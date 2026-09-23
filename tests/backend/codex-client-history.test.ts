@@ -325,15 +325,14 @@ describe('CodexClient history sync', () => {
     }
   });
 
-  it("handles fatal syncThread errors gracefully without rejecting", async () => {
+  it("keeps a session retryable when syncThread fails", async () => {
     const client = new CodexClient();
     vi.spyOn(client, "readThread").mockRejectedValue(new Error("Network unrecoverable"));
     const snapshots: unknown[][] = [];
     client.onHistory((threads) => snapshots.push(threads));
 
-    const res = await client.syncThread("fatal-thread");
-    expect(res).toEqual({ thread: null });
-    expect(snapshots).toEqual([[{ id: "fatal-thread", turnsLoaded: true }]]);
+    await expect(client.syncThread("fatal-thread")).rejects.toThrow("Network unrecoverable");
+    expect(snapshots).toEqual([[{ id: "fatal-thread", turnsLoaded: false }]]);
   });
 
   it('adapts notifications to provider trace events without changing Codex behavior', () => {

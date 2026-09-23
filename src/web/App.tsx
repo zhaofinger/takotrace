@@ -36,6 +36,7 @@ export default function App() {
   const [turnDetailLoading, setTurnDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
+  const [syncError, setSyncError] = useState<{ threadId: string; message: string }>();
   const [syncingThreads, setSyncingThreads] = useState<Set<string>>(() => new Set());
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
   const refreshTimer = useRef<number | undefined>(undefined);
@@ -126,12 +127,16 @@ export default function App() {
     void syncThread(selectedThreadId)
       .then(() => {
         failedSyncThreadIds.current.delete(selectedThreadId);
+        setSyncError((current) => current?.threadId === selectedThreadId ? undefined : current);
         return loadState();
       })
       .catch((error: unknown) => {
         failedSyncThreadIds.current.add(selectedThreadId);
         // Stop automatic retries until the user explicitly retries from the error banner.
-        setLoadError(error instanceof Error ? error.message : "Unable to sync thread");
+        setSyncError({
+          threadId: selectedThreadId,
+          message: error instanceof Error ? error.message : "Unable to sync thread",
+        });
       })
       .finally(() => {
         syncingThreadIds.current.delete(selectedThreadId);
@@ -144,8 +149,8 @@ export default function App() {
   }, [loadState, selectedThreadId, state.threads, syncRetryNonce]);
 
   const retryLoad = () => {
-    if (selectedThreadId && failedSyncThreadIds.current.delete(selectedThreadId)) {
-      setLoadError(undefined);
+    if (syncError && failedSyncThreadIds.current.delete(syncError.threadId)) {
+      setSyncError(undefined);
       setSyncRetryNonce((current) => current + 1);
       return;
     }
@@ -153,8 +158,11 @@ export default function App() {
   };
 
   const selectedThread = state.threads.find((thread) => thread.id === selectedThreadId);
+  const selectedSyncError = syncError?.threadId === selectedThreadId ? syncError : undefined;
+  const errorMessage = selectedSyncError?.message ?? loadError;
   const threadLoading = Boolean(
     selectedThreadId
+    && !selectedSyncError
     && (selectedThread?.turnsLoaded === false || syncingThreads.has(selectedThreadId)),
   );
   const turns = useMemo(() => selectedThread?.turns ?? [], [selectedThread]);
@@ -225,9 +233,9 @@ export default function App() {
         theme={theme}
         threads={visibleThreads}
       />
-      {loadError && (
+      {errorMessage && (
         <div className="vbg-custom-error-banner" role="alert">
-          <span>{loadError}</span>
+          <span>{errorMessage}</span>
           <button onClick={retryLoad} type="button">Retry</button>
         </div>
       )}

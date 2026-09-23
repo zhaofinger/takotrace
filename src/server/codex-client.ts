@@ -255,19 +255,23 @@ export class CodexClient implements TraceProvider {
   }
 
   async syncThread(threadId: string): Promise<unknown> {
-    this.loadedThreadIds.add(threadId);
     try {
       const response = record(await this.readThread(threadId));
       const thread = response.thread;
       if (thread) {
+        this.loadedThreadIds.add(threadId);
         this.threadVersions.set(threadId, numberField(thread, 'updatedAt'));
         this.emitter.emit('history', [withTurnsLoaded(thread, true)], false, 'codex');
       }
       return response;
     } catch (error) {
-      this.emitter.emit('stderr', `Warning: syncThread failed for ${threadId}: ${error instanceof Error ? error.message : error}\n`);
-      this.emitter.emit('history', [{ id: threadId, turnsLoaded: true }], false, 'codex');
-      return { thread: null };
+      const message = error instanceof Error ? error.message : String(error);
+      this.emitter.emit('stderr', `Warning: syncThread failed for ${threadId}: ${message}\n`);
+      // Leave the session unloaded so the UI keeps offering a retry instead of
+      // reporting an empty run list, and stop re-hydrating it in the background.
+      this.loadedThreadIds.delete(threadId);
+      this.emitter.emit('history', [{ id: threadId, turnsLoaded: false }], false, 'codex');
+      throw Object.assign(new Error(`Unable to load runs for this session: ${message}`), { statusCode: 502 });
     }
   }
 
