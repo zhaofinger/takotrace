@@ -263,6 +263,7 @@ export function threadToHistory(value: unknown): HistoricalThread | undefined {
     parentThreadId,
     title: stringAt(thread, ['name'], ['preview']) ?? `Session ${id.slice(0, 8)}`,
     status: shouldDeriveStatus && turns.length ? turns[turns.length - 1].status : declaredStatus,
+    localFileSizeBytes: typeof thread.localFileSizeBytes === 'number' && Number.isFinite(thread.localFileSizeBytes) && thread.localFileSizeBytes >= 0 ? thread.localFileSizeBytes : undefined,
     turnsLoaded: thread.turnsLoaded === true,
     historySource: thread.historySource === 'rollout-file' || thread.historySource === 'app-server'
       ? thread.historySource

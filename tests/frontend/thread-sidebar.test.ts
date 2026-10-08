@@ -8,6 +8,7 @@ describe('ThreadSidebar', () => {
   it('uses compact project groups without numeric thread prefixes', () => {
     const threads: Thread[] = Array.from({ length: 6 }, (_, index) => ({
       id: `thread-${index + 1}`,
+      localFileSizeBytes: 1536,
       title: `Thread ${index + 1}`,
       cwd: '/workspace/project',
       status: 'pending',
@@ -23,6 +24,9 @@ describe('ThreadSidebar', () => {
     }));
 
     expect(markup.match(/class="vbg-custom-thread-row(?: vbg-custom-is-selected)?"/g)).toHaveLength(5);
+    expect(markup).toContain('Project session logs: 9 KB');
+    expect(markup).not.toContain('1.5 KB');
+    expect(markup).not.toContain('Local session log:');
     expect(markup).toContain('Load more');
     expect(markup).toContain('aria-label="Load more project sessions"');
     expect(markup).toContain('aria-label="Collapse project"');
@@ -42,6 +46,20 @@ describe('ThreadSidebar', () => {
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain('Codex');
     expect(markup).toContain('Claude');
+  });
+
+  it('sums project tokens across collapsed sessions and marks incomplete usage', () => {
+    const usage = { totalTokens: 1_000_000, inputTokens: 900_000, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 100_000, reasoningOutputTokens: 0 };
+    const threads: Thread[] = Array.from({ length: 7 }, (_, index) => ({
+      id: `t-${index}`, title: 'Session', cwd: '/project', status: 'completed',
+      turnsLoaded: false, createdAt: '', updatedAt: '', turns: [],
+      ...(index < 6 ? { tokenUsage: { total: usage, last: usage } } : {}),
+    }));
+    const render = (values: Thread[]) => renderToStaticMarkup(createElement(ThreadSidebar, { threads: values, onSelect: () => undefined }));
+    expect(render(threads)).toContain('Project token usage: 6M+ tokens');
+    expect(render(threads)).toContain('usage available for 6 of 7 listed sessions');
+    expect(render(threads.slice(0, 6))).toContain('Project token usage: 6M tokens');
+    expect(render(threads.slice(6))).toContain('Project token usage: — tokens');
   });
 
   it('renders provider counts and selects the active provider tab', () => {

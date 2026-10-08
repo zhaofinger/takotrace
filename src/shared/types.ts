@@ -66,6 +66,7 @@ export interface ThreadState {
   id: string;
   title: string;
   status: EntityStatus;
+  localFileSizeBytes?: number;
   turnsLoaded: boolean;
   historySource?: HistorySource;
   provider?: ProviderId;
@@ -121,6 +122,7 @@ export interface HistoricalThread {
   parentThreadId?: string | null;
   title: string;
   status: EntityStatus;
+  localFileSizeBytes?: number;
   turnsLoaded: boolean;
   historySource?: HistorySource;
   provider?: ProviderId;

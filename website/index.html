@@ -32,7 +32,7 @@
         />TakoTrace</a
       >
       <nav aria-label="主导航">
-        <a href="#features">功能</a><a href="#start">快速开始</a
+        <a href="#features">功能</a><a href="#changelog">更新日志</a><a href="#start">快速开始</a
         ><a class="github" href="https://github.com/zhaofinger/takotrace"
           >GitHub <span aria-hidden="true">↗</span></a
         >
@@ -255,6 +255,24 @@
             本地 API 没有通用认证层，请勿直接暴露到局域网或公网。
           </p>
         </div>
+      </section>
+      <section class="wrap section changelog" id="changelog" aria-labelledby="changelog-title">
+        <div class="changelog-heading">
+          <h2 id="changelog-title">更新日志</h2>
+          <a class="text-link changelog-all" href="https://github.com/zhaofinger/takotrace/releases">所有版本 ↗</a>
+        </div>
+        <article class="release-entry">
+          <div class="release-meta"><a href="https://github.com/zhaofinger/takotrace/releases/tag/v0.0.7">v0.0.7</a><time datetime="2026-10-08">2026-10-08</time></div>
+          <div><h3 class="release-007-title">看清会话与项目的资源消耗</h3>
+            <ul><li class="release-007-storage">会话摘要显示本地日志大小，项目标题下汇总磁盘占用与 token 消耗。</li>
+              <li class="release-007-tokens">后台读取 Codex 日志中的累计 token，无需逐个打开会话；缓存未变化的文件，减少重复读取。</li>
+              <li class="release-007-scope">项目统计覆盖当前列表中的会话；数据不完整时显示 +，悬停可查看覆盖数量。磁盘统计不包含项目文件和共享缓存。</li></ul>
+          </div>
+        </article>
+        <article class="release-entry">
+          <div class="release-meta"><a href="https://github.com/zhaofinger/takotrace/releases/tag/v0.0.6">v0.0.6</a><time datetime="2026-09-23">2026-09-23</time></div>
+          <div><h3 class="release-006-title">改善大体积会话加载</h3><p class="release-006-body">优化大型 JSONL 响应的解析性能，并让加载失败的会话可以重试。</p></div>
+        </article>
       </section>
     </main>
     <footer class="wrap footer">

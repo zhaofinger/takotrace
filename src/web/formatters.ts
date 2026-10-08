@@ -65,3 +65,11 @@ export function projectName(cwd?: string): string {
   const normalized = cwd.replace(/[\\/]+$/, "");
   return normalized.split(/[\\/]/).pop() || cwd;
 }
+
+export function formatFileSize(bytes?: number): string {
+  if (bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = bytes === 0 ? 0 : Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const unit = Math.max(0, index);
+  return `${Number((bytes / 1024 ** unit).toFixed(unit === 0 ? 0 : 1))} ${units[unit]}`;
+}

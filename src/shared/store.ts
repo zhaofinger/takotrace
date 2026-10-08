@@ -48,6 +48,7 @@ export class TraceStore {
         updatedAt: thread.updatedAt,
         cwd: thread.cwd,
         projectFolder: thread.projectFolder,
+        localFileSizeBytes: thread.localFileSizeBytes,
         tokenUsage: thread.tokenUsage,
         turns: thread.turns.map((turn) => ({
           id: turn.id,
@@ -181,6 +182,7 @@ export class TraceStore {
       thread = { ...history, turns: [] };
       this.state.threads.push(thread);
     } else {
+      thread.localFileSizeBytes = history.localFileSizeBytes ?? thread.localFileSizeBytes;
       thread.title = history.title;
       thread.createdAt = history.createdAt;
       thread.turnsLoaded ||= history.turnsLoaded;

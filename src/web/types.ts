@@ -82,6 +82,7 @@ export interface Thread {
   title: string;
   cwd?: string;
   status: TraceStatus;
+  localFileSizeBytes?: number;
   turnsLoaded: boolean;
   historySource?: "app-server" | "rollout-file" | "claude";
   provider?: "codex" | "claude";

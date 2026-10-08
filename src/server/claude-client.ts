@@ -371,6 +371,7 @@ export function sessionToHistory(session: SDKSessionInfo, messages: SessionMessa
     createdAt: isoAtMs(session.createdAt ?? session.lastModified),
     updatedAt: isoAtMs(session.lastModified),
     cwd: session.cwd,
+    localFileSizeBytes: session.fileSize,
     status: 'completed',
     turnsLoaded: true,
     historySource: 'claude',

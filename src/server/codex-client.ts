@@ -1,9 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { stat } from 'node:fs/promises';
 import { EventEmitter } from 'node:events';
 import { JsonlParser } from '../shared/jsonl.js';
 import type { RpcMessage, RpcNotification, RpcResponse } from '../shared/types.js';
 import { notificationToTrace } from '../shared/trace.js';
 import type { TraceInput, TraceProvider } from './provider.js';
+import { RolloutUsageReader } from './rollout-usage.js';
 import { readRolloutThread, rolloutSourceName } from './rollout-reader.js';
 
 export interface CodexClientOptions {
@@ -34,6 +36,7 @@ export class CodexClient implements TraceProvider {
   private historyTimer?: NodeJS.Timeout;
   private historySync?: Promise<void>;
   private readonly threadVersions = new Map<string, number>();
+  private readonly usageReader = new RolloutUsageReader();
   private readonly loadedThreadIds = new Set<string>();
   private readonly pending = new Map<number | string, {
     resolve: (value: unknown) => void;
@@ -244,6 +247,7 @@ export class CodexClient implements TraceProvider {
           ...thread,
           ...(missingRolloutTurns.length ? { historySource: 'rollout-file' } : {}),
           ...(rolloutThread.status && record(rolloutThread.status).type === 'active' ? { status: rolloutThread.status } : {}),
+          localFileSizeBytes: rolloutThread.localFileSizeBytes,
           ...(rolloutThread.tokenUsage === undefined ? {} : { tokenUsage: rolloutThread.tokenUsage }),
           ...(turns === undefined ? {} : { turns }),
         },
@@ -347,7 +351,27 @@ export class CodexClient implements TraceProvider {
         selectedIds.add(id);
       }
     }
-    this.emitter.emit('history', selected.map((value) => withTurnsLoaded(value, false)), true, 'codex');
+    const summaries = await mapLimit(selected, 8, async (value) => {
+      const thread = record(value);
+      const size = typeof thread.path === 'string'
+        ? await stat(thread.path).then((info) => info.isFile() ? info.size : undefined).catch(() => undefined)
+        : undefined;
+      return withTurnsLoaded({ ...thread, localFileSizeBytes: size }, false);
+    });
+    this.emitter.emit('history', summaries, true, 'codex');
+
+    this.usageReader.retain(new Set(selected.flatMap((value) => {
+      const path = record(value).path;
+      return typeof path === 'string' ? [path] : [];
+    })));
+    const usageSummaries = await mapLimit(selected, 2, async (value) => {
+      const thread = record(value);
+      if (typeof thread.path !== 'string') return undefined;
+      const tokenUsage = await this.usageReader.read(thread.path);
+      return tokenUsage ? { ...thread, tokenUsage, turns: [], turnsLoaded: false } : undefined;
+    });
+    const usageUpdates = usageSummaries.filter((value) => value !== undefined);
+    if (usageUpdates.length) this.emitter.emit('history', usageUpdates, false, 'codex');
 
     const listedById = new Map(selected.flatMap((value) => {
       const id = record(value).id;

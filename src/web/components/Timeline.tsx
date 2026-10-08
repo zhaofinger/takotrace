@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { userMessageSummary } from "../../shared/user-message";
-import { formatClockTime, formatDateTime, formatExactNumber, formatPercentage } from "../formatters";
+import { formatFileSize, formatClockTime, formatDateTime, formatExactNumber, formatPercentage } from "../formatters";
 import { eventRaw, normalizedEventType } from "../trace-event";
 import type { CompactTraceEvent, CompactTurn, Thread, Turn } from "../types";
 import { asRecord, nonEmptyText } from "../value-utils";
@@ -158,6 +158,7 @@ export function Timeline({
                   {contextPercentage}
                 </span>
               )}
+              <span className="vbg-custom-session-summary__file-size" title="Local session log size">{formatFileSize(thread.localFileSizeBytes)}</span>
               <code className="vbg-custom-compact-id" title={thread.id}>{thread.id}</code>
             </button>
             <CopyIconButton copiedLabel="Session ID copied" copyLabel="Copy session ID" value={thread.id} />
@@ -193,6 +194,10 @@ export function Timeline({
             <div>
               <dt>Runs</dt>
               <dd>{isLoading ? "Loading…" : turns.length}</dd>
+            </div>
+            <div>
+              <dt>Local log</dt>
+              <dd title="Excludes project files and shared caches">{formatFileSize(thread.localFileSizeBytes)}</dd>
             </div>
             <div>
               <dt>Tokens</dt>

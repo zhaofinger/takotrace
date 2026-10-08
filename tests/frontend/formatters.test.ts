@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatFileSize,
   formatCompactDuration,
   formatDateTime,
   formatDateTimeWithMilliseconds,
@@ -12,6 +13,16 @@ import {
 } from "../../src/web/formatters";
 
 describe("shared display formatters", () => {
+  it('formats local bytes with binary units and keeps unknown distinct from zero', () => {
+    expect(formatFileSize()).toBe('—');
+    expect(formatFileSize(-1)).toBe('—');
+    expect(formatFileSize(0)).toBe('0 B');
+    expect(formatFileSize(1023)).toBe('1023 B');
+    expect(formatFileSize(1536)).toBe('1.5 KB');
+    expect(formatFileSize(1024 ** 2)).toBe('1 MB');
+    expect(formatFileSize(1024 ** 3)).toBe('1 GB');
+  });
+
   it("keeps compact and exact numeric formats distinct", () => {
     expect(formatTokenCount(16_000_000)).toBe("16M");
     expect(formatExactNumber(16_000_000)).toBe("16,000,000");

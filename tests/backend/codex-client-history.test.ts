@@ -7,6 +7,47 @@ import { CodexClient } from '../../src/server/codex-client.js';
 import type { TraceInput } from '../../src/server/provider.js';
 
 describe('CodexClient history sync', () => {
+  it('fills list token totals without opening session details', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'takotrace-list-usage-'));
+    const path = join(directory, 'session.jsonl');
+    const client = new CodexClient();
+    vi.spyOn(client, 'listThreads').mockResolvedValue({ data: [{ ...thread('local', 2), path }] });
+    const read = vi.spyOn(client, 'readThread');
+    const snapshots: unknown[][] = [];
+    client.onHistory((threads) => snapshots.push(threads));
+    try {
+      await writeFile(path, JSON.stringify({ type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { total_tokens: 12345 } } } }));
+      await client.refreshHistory();
+      expect(snapshots[1][0]).toMatchObject({ tokenUsage: { total: { totalTokens: 12345 } }, turnsLoaded: false });
+      expect(read).not.toHaveBeenCalled();
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+
+  it('publishes local log bytes without loading turns and refreshes growing files', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'takotrace-size-'));
+    const path = join(directory, 'session.jsonl');
+    const client = new CodexClient();
+    vi.spyOn(client, 'listThreads').mockResolvedValue({ data: [
+      { ...thread('local', 2), path },
+      { ...thread('missing', 1), path: join(directory, 'missing.jsonl') },
+    ] });
+    const read = vi.spyOn(client, 'readThread');
+    const snapshots: unknown[][] = [];
+    client.onHistory((threads) => snapshots.push(threads));
+    try {
+      await writeFile(path, '中文');
+      await client.refreshHistory();
+      expect(snapshots[0][0]).toMatchObject({ localFileSizeBytes: 6 });
+      expect(snapshots[0][1]).not.toHaveProperty('localFileSizeBytes', 0);
+      await writeFile(path, '中文更新');
+      await client.refreshHistory();
+      expect(snapshots[1][0]).toMatchObject({ localFileSizeBytes: 12 });
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('publishes paginated metadata without waiting for full thread reads', async () => {
     const client = new CodexClient({ historyPageSize: 1, historyThreadLimit: 10 });
     const list = vi.spyOn(client, 'listThreads')

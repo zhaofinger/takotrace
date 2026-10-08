@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { readdir } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -202,6 +202,7 @@ export async function readRolloutThread(
     source,
     thread: {
       id: threadId,
+      localFileSizeBytes: await stat(source).then((info) => info.size).catch(() => undefined),
       sessionId: stringField(sessionMeta.session_id),
       preview: truncate(preview ?? `Session ${threadId.slice(0, 8)}`, 160),
       status: { type: allCompleted ? 'idle' : 'active' },

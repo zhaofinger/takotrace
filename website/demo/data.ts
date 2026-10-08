@@ -261,6 +261,7 @@ function thread(
     title,
     provider,
     cwd: "/demo/notes-app",
+    localFileSizeBytes: 3_565_158,
     status: "completed",
     turnsLoaded: true,
     createdAt: at(0),

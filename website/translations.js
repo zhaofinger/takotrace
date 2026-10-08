@@ -1,4 +1,13 @@
 export const translations = [
+  ['.header a[href="#changelog"]', 'Changelog'],
+  ['#changelog-title', 'Changelog'],
+  ['.changelog-all', 'All releases ↗'],
+  ['.release-007-title', 'Session and project resource usage'],
+  ['.release-007-storage', 'See local log sizes in session summaries and combined disk and token usage beneath each project.'],
+  ['.release-007-tokens', 'Read cumulative Codex token usage in the background without opening each session. Unchanged files are cached to avoid repeated reads.'],
+  ['.release-007-scope', 'Project totals cover sessions in the current list. A + marks partial data; hover to see coverage. Disk totals exclude project files and shared caches.'],
+  ['.release-006-title', 'Faster loading for large sessions'],
+  ['.release-006-body', 'Improved parsing performance for large JSONL responses and made failed session loads retryable.'],
   ["title", "TakoTrace · Session inspector for Codex and Claude Code"],
   [
     'meta[name="description"]',

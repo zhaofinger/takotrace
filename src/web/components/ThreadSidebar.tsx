@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { projectName } from "../formatters";
+import { formatExactNumber, formatFileSize, formatTokenCount, projectName } from "../formatters";
 import { handleRovingTabKey } from "../roving-tabs";
 import type { SessionProvider, Thread } from "../types";
 import { Icon } from "./Icon";
@@ -220,7 +220,12 @@ export function ThreadSidebar({
                   type="button"
                 >
                   <Icon name={isGroupCollapsed ? "folder" : "folderOpen"} />
-                  <span>{group.label}</span>
+                  <span className="vbg-custom-project-name">{group.label}</span>
+                  <span className="vbg-custom-project-usage">
+                    <ProjectTokenUsage threads={group.threads} />
+                    <span aria-hidden="true">·</span>
+                    <ProjectFileSize threads={group.threads} />
+                  </span>
                 </button>
               </h3>
               {!isGroupCollapsed && visibleThreads.map((thread) => (
@@ -287,5 +292,31 @@ export function ThreadSidebar({
         role="tabpanel"
       />
     </aside>
+  );
+}
+
+function ProjectFileSize({ threads }: { threads: Thread[] }) {
+  const known = threads.filter((thread) => thread.localFileSizeBytes !== undefined);
+  const bytes = known.reduce((total, thread) => total + thread.localFileSizeBytes!, 0);
+  const size = known.length ? `${formatFileSize(bytes)}${known.length < threads.length ? "+" : ""}` : "—";
+  return (
+    <span
+      className="vbg-custom-project-file-size"
+      title={`Local logs for ${known.length} of ${threads.length} listed sessions in this project; excludes project files and shared caches`}
+      aria-label={`Project session logs: ${size}`}
+    >{size}</span>
+  );
+}
+
+function ProjectTokenUsage({ threads }: { threads: Thread[] }) {
+  const known = threads.filter((thread) => thread.tokenUsage !== undefined);
+  const total = known.reduce((sum, thread) => sum + thread.tokenUsage!.total.totalTokens, 0);
+  const partial = known.length < threads.length;
+  const label = known.length ? `${formatTokenCount(total)}${partial ? "+" : ""} tokens` : "— tokens";
+  return (
+    <span
+      title={`Total tokens: ${known.length ? formatExactNumber(total) : "unknown"}; usage available for ${known.length} of ${threads.length} listed sessions${partial ? "; remaining sessions are not included" : ""}`}
+      aria-label={`Project token usage: ${label}`}
+    >{label}</span>
   );
 }

@@ -135,3 +135,13 @@ test("build emits translated HTML, reciprocal languages, sitemap, and bundled im
     }
   }
 });
+
+test("changelog is linked and translated in both languages", () => {
+  for (const [lang, title] of [["zh", "更新日志"], ["en", "Changelog"]]) {
+    const { document } = parseHTML(renderPage(source, lang));
+    assert.equal(document.querySelector('#changelog-title').textContent, title);
+    assert.ok(document.querySelector('.header a[href="#changelog"]'));
+    assert.equal(document.querySelectorAll('.release-entry').length, 2);
+    assert.ok(document.querySelector('a[href$="/releases/tag/v0.0.7"]'));
+  }
+});

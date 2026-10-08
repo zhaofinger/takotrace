@@ -5,6 +5,7 @@ import { ClaudeClient, messagesToTurns, sessionToHistory, type ClaudeSdk } from 
 describe('ClaudeClient history mapping', () => {
   it('maps sessions and messages to history with canonical item raw', async () => {
     const session: SDKSessionInfo = {
+      fileSize: 2048,
       sessionId: 'session-1',
       summary: 'Investigate flaky tests',
       firstPrompt: 'Investigate flaky tests',
@@ -13,6 +14,7 @@ describe('ClaudeClient history mapping', () => {
       createdAt: 1_767_225_600_000,
       cwd: '/tmp/project',
     };
+    expect(sessionToHistory(session, [])).toMatchObject({ localFileSizeBytes: 2048 });
     const messages = [
       message('user', 'u-1', null, { type: 'text', text: 'Fix the login bug' }),
       message('assistant', 'a-1', null, { type: 'thinking', thinking: 'Check the auth flow' }),

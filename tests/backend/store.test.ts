@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { TraceStore } from '../../src/shared/store.js';
 
 describe('TraceStore', () => {
+  it('preserves file size through compact snapshots and metadata-only updates', () => {
+    const store = new TraceStore();
+    store.synchronizeThreads([{ id: 'sized', localFileSizeBytes: 1024, turns: [] }]);
+    expect(store.publicSnapshot().threads[0].localFileSizeBytes).toBe(1024);
+    store.synchronizeThreads([{ id: 'sized', turns: [] }]);
+    expect(store.publicSnapshot().threads[0].localFileSizeBytes).toBe(1024);
+    store.synchronizeThreads([{ id: 'sized', localFileSizeBytes: 0, turns: [] }]);
+    expect(store.publicSnapshot().threads[0].localFileSizeBytes).toBe(0);
+  });
+
   it('reduces thread, turn and item lifecycle events', () => {
     const store = new TraceStore();
     store.add(event('thread/started', 'running'));
